@@ -1,0 +1,36 @@
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+
+START=90
+start() 
+{
+    sh /app/miner.xyipkmng.ipk/start.sh &
+}
+
+stop() 
+{
+    sh /app/miner.xyipkmng.ipk/stop.sh &
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart)
+        stop
+        start
+        ;;
+  reload)
+        stop
+        start
+        ;;
+  *)
+        exit 1
+esac
+
+exit 0
+
