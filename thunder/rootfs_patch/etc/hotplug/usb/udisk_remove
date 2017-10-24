@@ -1,0 +1,12 @@
+#!/bin/sh
+/etc/init.d/S50dropbear stop
+rm /tmp/usb_repair.log
+for i in  `ls /media`
+do
+    if [ ! -e "/dev/$i" ];then
+  	cd / 
+	umount  -fl /media/$i
+	rm -rf /media/$i
+    fi
+done
+

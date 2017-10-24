@@ -1,0 +1,23 @@
+#!/bin/sh
+
+timestamp=`date`
+
+echo "[$timestamp]usb hotplug handle[$DEVNAME][$DEVTYPE][$ACTION]" >>/tmp/mdev.log
+
+if [ "$ACTION" = "add" ];then
+	ubus call mnt blink
+    if [ -n "$DEVNAME" -a -n "$DEVTYPE" ];then
+		echo "udisk add" >>/tmp/mdev.log
+		ubus call mnt usb_insert "{\"name\":\"$DEVNAME\", \"type\":\"$DEVTYPE\"}"
+		sleep 3
+	else
+		echo "add by mdev -s" >>/tmp/mdev.log
+	fi
+	/etc/hotplug/usb/udisk_insert &
+elif [ "$ACTION" = "remove" ];then
+	echo "udisk remove" >>/tmp/mdev.log
+	ubus call mnt usb_remove "{\"name\":\"$DEVNAME\", \"type\":\"$DEVTYPE\"}"
+	/etc/hotplug/usb/udisk_remove &
+else
+	echo "unknow action" >>/tmp/mdev.log
+fi

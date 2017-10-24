@@ -1,0 +1,10 @@
+#!/bin/sh
+for i in  `ls /media`
+do
+    if [ ! -f "/dev/$i" ];then
+  	cd / 
+	umount  /media/$i
+    rm -rf /media/$i
+    fi
+done
+

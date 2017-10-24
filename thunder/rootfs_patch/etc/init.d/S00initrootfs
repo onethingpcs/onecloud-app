@@ -1,0 +1,10 @@
+TMPDIR="/tmp/tmp /tmp/cache /tmp/lib/misc /tmp/lib/pcmcia /tmp/lock /tmp/log /tmp/pcmcia /tmp/run /tmp/spool"
+for i in $TMPDIR
+do
+    if [ ! -x $i ]; then
+    echo "not exist dir,mkdir  $i"
+    /bin/busybox mkdir -p $i
+    else
+    echo "$i is exist now!"
+    fi
+done

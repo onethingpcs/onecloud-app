@@ -1,0 +1,108 @@
+#!/bin/sh
+USB_MOUNT_PATH=/media
+if [ ! -x $USB_MOUNT_PATH ];then
+mkdir -p $USB_MOUNT_PATH
+fi
+
+export LD_LIBRARY_PATH=/thunder/lib
+export PATH=$PATH:/thunder/bin
+#ubus call mnt blink
+lsmod | grep ufsd
+
+if [ "$?" != "0" ];then
+    insmod /thunder/lib/jnl.ko
+    insmod /thunder/lib/ufsd.ko
+    sleep 1
+fi
+
+search_key_to_open_ssh_on ()
+{
+    dev_path="$USB_MOUNT_PATH/$1"
+    finger_file="/tmp/.key2ssh"
+    dev_sn=`ubus call remote get_profile | grep device_sn | awk -F\" '{print $4}'`
+    dev_mac=`ubus call remote get_profile | grep mac_address | awk -F\" '{print $4}'`
+
+    echo $dev_sn > $finger_file
+    echo $dev_mac >> $finger_file
+
+    key_file=`md5sum $finger_file | awk '{print $1}'`
+
+    if [ -f $dev_path/$key_file ]; then
+        echo "$dev_path/$key_file exist turn on ssh now" >>/tmp/mdev.log
+        /etc/init.d/S50dropbear restart
+    fi
+
+    return 0
+}
+
+for i in  `ls /dev/sd*`
+do
+    mount | grep $i
+    if [ "$?" = "0" ];then
+		echo "$i has mounted" >>/tmp/mdev.log
+        ubus call mnt noblink
+    else
+    	DEV_NAME=`echo $i | awk -F \/ '{ print $3 }'`
+        
+        SDEV=`echo $i | awk '{print gensub("[0-9]+$","",$0)}'`
+        TYPE=`fdisk -l $SDEV | grep $i | awk '{print $6}'`
+        if [ "$TYPE" = "EFI" ]; then
+            echo "$i is a EFI partition ignored" >>/tmp/mdev.log
+            continue
+        fi
+
+		ls /tmp | grep "flag" | grep "$DEV_NAME"
+		if [ "$?" = "0" ];then
+			echo "detect $DEV_NAME is repairing" >>/tmp/usb_repair.log
+			continue
+		fi
+
+        if [ ! -d "$USB_MOUNT_PATH/$DEV_NAME" ];then
+            mkdir -m 777 -p $USB_MOUNT_PATH/$DEV_NAME && chattr +i $USB_MOUNT_PATH/$DEV_NAME
+        fi
+        
+        mount -t vfat -o umask=000,iocharset=utf8 $i $USB_MOUNT_PATH/$DEV_NAME
+        if [ "$?" != "0" ];then
+			mount -t ufsd -o nls=utf8,nolazy,force,umask=000 $i $USB_MOUNT_PATH/$DEV_NAME
+        else
+            search_key_to_open_ssh_on $DEV_NAME
+			/thunder/scripts/usb_repair.sh "vfat" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/usb_repair.log &
+			continue
+        fi
+  
+        if [ "$?" != "0" ];then
+            mount -o umask=000 $i $USB_MOUNT_PATH/$DEV_NAME
+        else
+            search_key_to_open_ssh_on $DEV_NAME
+			/thunder/scripts/usb_repair.sh "ufsd" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/usb_repair.log &
+            continue
+        fi
+    
+        if [ "$?" != "0" ];then
+            mount -t ext3 $i $USB_MOUNT_PATH/$DEV_NAME
+        else
+            search_key_to_open_ssh_on $DEV_NAME
+			/thunder/scripts/usb_repair.sh "fuck" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/usb_repair.log &
+            continue
+        fi
+
+        if [ "$?" != "0" ];then
+            mount -t ext4 $i $USB_MOUNT_PATH/$DEV_NAME
+        else
+            search_key_to_open_ssh_on $DEV_NAME
+			/thunder/scripts/usb_repair.sh "ext3" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/usb_repair.log &
+            continue
+        fi
+        
+        if [ "$?" != "0" ];then
+            continue
+        else
+            search_key_to_open_ssh_on $DEV_NAME
+			/thunder/scripts/usb_repair.sh "ext4" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/usb_repair.log &
+            continue
+        fi
+
+    fi
+done
+
+#ubus call mnt noblink

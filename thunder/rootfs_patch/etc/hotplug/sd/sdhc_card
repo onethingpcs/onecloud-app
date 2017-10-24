@@ -1,0 +1,25 @@
+#!/bin/sh
+
+timestamp=`date`
+
+if [ "$ACTION" = "add" ];then
+	if [ -n "$DEVNAME" -a -n "$DEVTYPE" ];then
+		echo "[$timestamp]sdhc card [$DEVNAME][$DEVTYPE][$ACTION]" >>/tmp/mdev.log
+		ubus call mnt usb_insert "{\"name\":\"$DEVNAME\", \"type\":\"$DEVTYPE\"}"
+		sleep 3
+	else
+		echo "add by mdev -s" >>/tmp/mdev.log
+	fi
+	/etc/hotplug/sd/sd_insert &
+elif [ "$ACTION" = "remove" ];then
+	echo "[$timestamp]sdhc card [$DEVNAME][$DEVTYPE][$ACTION]" >>/tmp/mdev.log
+	ubus call mnt usb_remove "{\"name\":\"$DEVNAME\", \"type\":\"$DEVTYPE\"}"
+	#/etc/hotplug/sd/sd_remove &
+	stillmounted=`mount 2>/dev/null | grep /media/$DEVNAME 2>/dev/null`
+	if [ -n "$stillmounted" ];then
+
+		umount /media/$DEVNAME
+	fi
+else
+	echo "[$timestamp]unknow action [$DEVNAME][$DEVTYPE][$ACTION]" >>/tmp/mdev.log
+fi
