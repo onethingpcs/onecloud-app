@@ -1,0 +1,7 @@
+#!/bin/sh
+python /app/system/miner.plugin-ubootinstall.ipk/bin/install_uboot.py
+while :
+do
+    sleep 10
+done
+
