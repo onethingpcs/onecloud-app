@@ -1,0 +1,16 @@
+#!/bin/sh
+PLUGIN_DIR="/app/system/miner.plugin-cbs.ipk"
+PLUGIN_BIN_DIR="${PLUGIN_DIR}/bin"
+
+while :
+do
+    procnum=` ps -ef|grep "cbs_client" | grep -v grep| wc -l`
+    echo $procnom
+    if [ $procnum -eq 0 ]; then
+        echo "restart plugin-cbs" > /tmp/.cbslog
+        cd ${PLUGIN_BIN_DIR} && ./cbs_client
+    else
+        echo "plugin-cbs work ok" >>/tmp/.cbslog
+    fi
+    sleep 30
+done
