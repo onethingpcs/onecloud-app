@@ -1,0 +1,11 @@
+#!/bin/sh
+while true
+do
+    procnum=`ps -ef | grep minion | grep python | grep -v grep | wc -l`
+    if [ $procnum -eq 0 ]; then
+        cd /app/system/miner.plugin-minion.ipk/bin; python minion/src/minion/minion.py start
+        sleep 10
+    else
+        sleep 600
+    fi
+done
