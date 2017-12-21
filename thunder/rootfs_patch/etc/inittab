@@ -21,7 +21,7 @@
 ::sysinit:/bin/mount -o remount,rw /
 ::sysinit:/bin/mount -a
 ::sysinit:/bin/mount /dev/misc /misc
-::sysinit:/bin/mount /dev/app0 /thunder
+#::sysinit:/bin/mount /dev/app0 /thunder
 ::sysinit:/bin/hostname -F /etc/hostname
 ::sysinit:/sbin/ifconfig lo 127.0.0.1 up
 ::sysinit:/sbin/route add -net 127.0.0.0 netmask 255.0.0.0 lo
@@ -65,6 +65,6 @@ null::sysinit:echo 96000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq
 null::sysinit:echo hotplug > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 null::sysinit:echo 0 > /sys/class/freq_limit/limit
 null::sysinit:echo 1488000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_dflt_freq
-null::sysinit:/etc/set_display_mode.sh
+#null::sysinit:/etc/set_display_mode.sh
 null::sysinit:echo "nameserver 114.114.114.114" >> /etc/resolv.conf
 #::sysinit:/lib/preinit/auto_reboot.sh

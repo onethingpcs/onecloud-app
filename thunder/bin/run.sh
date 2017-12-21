@@ -28,15 +28,19 @@ check_rootfs_patch()
         rootfs_file=${patch_file#$ROOTFS_PATCH_DIR}
         diff $rootfs_file $patch_file > /dev/null
         if [ "$?" -eq "0" ];then
-        echo "" > /dev/null
+            echo "" > /dev/null
         else
-        PATCH_DIR=${rootfs_file%/*}
-        if [ ! -d $PATCH_DIR ];then
-        mkdir -p $PATCH_DIR
-        fi
-        cp -a $patch_file $rootfs_file
-        chmod a+x $rootfs_file
-        chmod a+r $rootfs_file
+            PATCH_DIR=${rootfs_file%/*}
+            if [ ! -d $PATCH_DIR ];then
+                mkdir -p $PATCH_DIR
+            fi
+            [ -s $patch_file ] || continue
+            cp -a $patch_file $rootfs_file.tmp
+            [ $? -eq 0  -a -s $rootfs_file.tmp ] || continue
+            mv $rootfs_file.tmp $rootfs_file
+            sync
+            chmod a+x $rootfs_file
+            chmod a+r $rootfs_file
         fi
     done
     for patch_file in  $(find $ROOTFS_PATCH_DIR -type l) ;do
@@ -78,6 +82,8 @@ init_env ()
     export QT_QPA_FONTDIR=/usr/share/fonts
     export media_arm_audio_decoder='ape,flac,dts,ac3,eac3,wma,wmapro,mp3,aac,vorbis,raac,cook,amr,pcm,adpcm'
     export media_libplayer_modules='libcurl_mod.so,libdash_mod.so'
+    export SN=`cat /tmp/miner_sn`
+    export APPVER=`awk -F- '{ print $4 }' /thunder/etc/.img_date`
     update_busybox
     check_ramlist
     UBUSD_SERV_PID=`ps | grep ubusd | grep -v grep`
@@ -103,6 +109,7 @@ init_env ()
     mkdir -p /tmp/nginx/socket
     /thunder/bin/nginx -p /tmp/nginx -c /thunder/etc/conf/nginx.conf
     
+	/thunder/bin/hsd
 }
 
 run_app ()
@@ -153,25 +160,22 @@ mount_thunder_dir()
 }
 
 SOFTMODE=`fw_printenv xl_softmode |  awk -F "=" '{print $2}'`
-if [ ! "$SOFTMODE" = "factory" ]; then
-    mount_thunder_dir
-fi
+#if [ ! "$SOFTMODE" = "factory" ]; then
+#    mount_thunder_dir
+#fi
 init_env
 
 if [ "$SOFTMODE" == "factory" ]; then
+	/etc/init.d/S50telnet   start
     /etc/hotplug/sd/sd_insert
     /etc/hotplug/usb/udisk_insert
     /thunder/bin/factory_app
 else
     check_rootfs_patch
     # shutdown ssh & telnet server in release
-    if [ ! -f /thunder/etc/develop ]; then
-      /etc/init.d/S50dropbear stop
-      [ -f /usr/sbin/telnetd ] && rm /usr/sbin/telnetd
-    else
-      /etc/init.d/S50dropbear restart
-      [ -f /usr/sbin/telnetd ] || ln -s /bin/busybox /usr/sbin/telnetd
-    fi
+	/etc/init.d/S50dropbear stop
+	/etc/init.d/S50telnet   stop
+	/etc/init.d/S70vsftpd   stop
 
     run_app
     if [ ! -f /tmp/.usb_insert ];then

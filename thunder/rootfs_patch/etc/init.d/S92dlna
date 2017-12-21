@@ -4,7 +4,15 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/thunder/lib:/lib:/usr/lib
 
 #mkdir -p /var/log/dlna
 
+dlna_switch () {
+	printf "Running switch dlna ..."
+	local runflag=`cat /thunder/etc/config.json | sed 's/{.*\"dlna\": *\"\([^,}]*\)\".*}/\1/'`
+	[ $runflag = 1 ] && return 0 || return 1
+}
+
 start() {
+	dlna_switch
+	[ $? = 0 ] || return
 	printf "Starting DLNA services: "
 	/thunder/bin/dlna &
 	[ $? = 0 ] && echo "OK" || echo "FAIL"

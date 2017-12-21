@@ -83,13 +83,13 @@ ubus call mnt usb_insert "{\"name\":\"$dev_basename\", \"type\":\"partion\", \"s
 echo "do usb_repair for $dev_name ($fstype)"
 
 if [ "$fstype" = "ufsd" ];then
-	chkntfs -f $dev_name
+	chkntfs -a -f $dev_name
 	mount -t ufsd -o nls=utf8,nolazy,force,umask=000 $dev_name $mount_dir
 elif [ "$fstype" = "ufsd-sd" ];then
-	chkntfs -f $dev_name
+	chkntfs -a -f $dev_name
 	mount -t ufsd -o wb=1,ra=4M,force $dev_name $mount_dir
 elif [ "$fstype" = "ntfs" ];then
-	chkntfs -f $dev_name
+	chkntfs -a -f $dev_name
 	ntfs-3g $dev_name $mount_dir
 elif [ "$fstype" = "ext4" ];then
 	fsck.ext3 -p $dev_name

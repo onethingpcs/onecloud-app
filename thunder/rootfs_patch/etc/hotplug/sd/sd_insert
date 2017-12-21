@@ -42,18 +42,12 @@ do
         fi
   
         if [ "$?" != "0" ];then
-            mount -o umask=000 $i $USB_MOUNT_PATH/$DEV_NAME
+            mount -t ext3 $i $USB_MOUNT_PATH/$DEV_NAME
         else
 			/thunder/scripts/usb_repair.sh "ufsd" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/.sdcard_repair.log &
             continue
         fi
     
-        if [ "$?" != "0" ];then
-            mount -t ext3 $i $USB_MOUNT_PATH/$DEV_NAME
-        else
-			/thunder/scripts/usb_repair.sh "fuck" $i $USB_MOUNT_PATH/$DEV_NAME >>/tmp/.sdcard_repair.log &
-            continue
-        fi
 
         if [ "$?" != "0" ];then
             mount -t ext4 $i $USB_MOUNT_PATH/$DEV_NAME

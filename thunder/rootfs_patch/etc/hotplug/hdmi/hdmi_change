@@ -1,0 +1,7 @@
+#!/bin/sh
+
+if [ "${SWITCH_STATE}" == "1" ]; then
+    /etc/init.d/S50display
+else
+    killall gui
+fi

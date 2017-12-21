@@ -1,0 +1,79 @@
+#!/bin/sh
+
+[ -f /etc/samba/smb.conf ] || exit 0
+
+mkdir -p /var/log/samba
+
+reset() {
+	printf "Reseting inode servrices: "
+	# replace dir '/var/lib/samba' as a link
+	rm -rf /tmp/samba.var/private/msg.sock
+	mkdir -p /tmp/samba.var/private/msg.sock
+	chmod -R 700 /tmp/samba.var/private/msg.sock
+	rm -rf /var/lib/samba/private/msg.sock/*
+	mkdir -p /var/lib/samba/private/msg.sock
+	local smbmount=`cat /proc/mounts | grep /var/lib/samba/private/msg.sock`
+	if [ -z "$smbmount" ]; then
+ 		mount /tmp/samba.var/private/msg.sock /var/lib/samba/private/msg.sock
+ 		local ret=$?
+	fi
+	chmod -R 700 /var/lib/samba/private/msg.sock
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+	return $ret
+}
+
+start() {
+	reset
+	[ $? = 0 ] || return
+	
+	printf "Starting SMB services: "
+	smbd -D
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+
+	printf "Starting NMB services: "
+	nmbd -D
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+stop() {
+	printf "Shutting down SMB services: "
+	kill -9 `pidof smbd`
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+
+	printf "Shutting down NMB services: "
+	kill -9 `pidof nmbd`
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+
+ 	umount -f /var/lib/samba/private/msg.sock
+}
+
+restart() {
+	stop
+	start
+}
+
+reload() {
+        printf "Reloading smb.conf file: "
+	kill -HUP `pidof smbd`
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+case "$1" in
+  start)
+  	start
+	;;
+  stop)
+  	stop
+	;;
+  restart)
+  	restart
+	;;
+  reload)
+  	reload
+	;;
+  *)
+	echo "Usage: $0 {start|stop|restart|reload}"
+	exit 1
+esac
+
+exit $?

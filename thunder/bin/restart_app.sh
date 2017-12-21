@@ -21,3 +21,5 @@ do
 done
 
 /thunder/bin/run.sh > /dev/null 2>&1
+[ -x /usr/sbin/onecloud_upgrade_restart.sh ] && /usr/sbin/onecloud_upgrade_restart.sh > /dev/null 2>&1
+

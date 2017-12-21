@@ -6,7 +6,7 @@ do
     if [ ! -e "/dev/$i" ];then
   	cd / 
 	umount  -fl /media/$i
-	rm -rf /media/$i
+    	rm -rf /media/$i
     fi
 done
 
