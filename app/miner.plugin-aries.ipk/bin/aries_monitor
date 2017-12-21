@@ -1,0 +1,15 @@
+#!/bin/sh
+PLUGIN_NAME="plugin-aries"
+
+while [[ true ]]
+do
+    procnum=`ps -ef | grep aries.py | grep python | grep -v grep | wc -l`
+    if [ $procnum -eq 0 ]
+    then
+        /usr/bin/python /app/system/miner.${PLUGIN_NAME}.ipk/bin/aries.py start
+        sleep 10
+    else
+        sleep 600
+    fi
+
+done
