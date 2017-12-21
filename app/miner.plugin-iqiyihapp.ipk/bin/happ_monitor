@@ -1,0 +1,100 @@
+#!/bin/sh
+PLUGIN_NAME="plugin-iqiyihapp"
+MAIN_EXE_NAME="happ"
+
+PLUGIN_DIR="/app/system/miner.${PLUGIN_NAME}.ipk"
+PLUGIN_BIN_DIR="${PLUGIN_DIR}/bin"
+USR_NAME=`echo ${PLUGIN_NAME} | awk -F "-"  '{print $1$2}'`
+PLUGIN_USR_LOG_DIR="/tmp/.${USR_NAME}/log"
+PLUGIN_DATA_DIR="/tmp/dcdn_base/.thirdapp"
+PLUGIN_USR_DATA_DIR="/tmp/dcdn_base/.thirdapp/${USR_NAME}_DATA"
+
+#plguin's log in root mode
+system_log ()
+{
+    echo "$*" >> /tmp/.${PLUGIN_NAME}.log
+}
+echo "" > /tmp/.${PLUGIN_NAME}.log
+system_log "USR_NAME  $USR_NAME"
+system_log "PLUGIN_NAME  ${PLUGIN_NAME}"
+system_log "PLUGIN_USR_DATA_DIR  $PLUGIN_USR_DATA_DIR"
+
+#Create usrname
+add_usr ()
+{
+    egrep '^${USR_NAME}' /etc/passwd >& /dev/null 
+    if [ $? -ne 0 ];then
+        adduser -D ${USR_NAME}
+    fi
+    chmod 777 /tmp
+    [ ! -x ${PLUGIN_USR_LOG_DIR} ] && su - ${USR_NAME} -c "mkdir ${PLUGIN_USR_LOG_DIR}"
+}
+
+
+#use usrname  run script
+run_script()
+{
+    #su - ${USR_NAME} -c \"$*\"
+    nohup sh -c "ulimit -s 2048 && ulimit -m 300000 -v 1024000 &&  su - ${USR_NAME} -c \"$*\""
+    system_log "$*"
+    system_log "Return $?"
+}
+
+#mkdir data dir for thirdpart app
+check_dir()
+{
+    [ ! -x ${PLUGIN_DATA_DIR} ] && mkdir ${PLUGIN_DATA_DIR} && chmod 777 ${PLUGIN_DATA_DIR}
+}
+
+#mkdir data dir for this plugin
+create_data_dir()
+{
+    run_script "mkdir ${PLUGIN_USR_DATA_DIR}"
+    system_log "mkdir ${PLUGIN_USR_DATA_DIR}"
+}
+
+stop_proc()
+{
+    pid=$(ps | grep -w ${MAIN_EXE_NAME} | grep -v monitor | grep -v grep | awk '{print $1}')
+    system_log "stop process: ${MAIN_EXE_NAME} pid: ${pid}"
+    kill $pid
+}
+monitor_plugin()
+{
+
+while :
+do
+    procnum=`ps | grep -w ${MAIN_EXE_NAME} | grep -v monitor | grep -v grep| wc -l`
+    if [ $procnum -eq 0 ]; then
+        system_log "restart ${PLUGIN_NAME}"
+        if [ -x "/tmp/dcdn_base" ];then
+            add_usr
+            check_dir
+            system_log "cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_USR_DATA_DIR}"
+            run_script "cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_USR_DATA_DIR}"
+        else
+            system_log "no dcdn_base dir ,sleep 10 mimutes"
+            sleep 600
+        fi
+
+    else
+        if [ -x "/tmp/dcdn_base" ]; then
+            if [ ! -x ${PLUGIN_DATA_DIR} ]; then
+                stop_proc
+                check_dir
+                system_log "cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_USR_DATA_DIR}"
+                run_script "cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_USR_DATA_DIR}"
+            fi
+        else
+            system_log "${PLUGIN_NAME} work ok"
+        fi
+    fi
+    sleep 10
+done
+
+}
+
+add_usr
+check_dir
+create_data_dir
+monitor_plugin
