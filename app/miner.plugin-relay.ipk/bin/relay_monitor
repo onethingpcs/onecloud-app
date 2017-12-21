@@ -1,0 +1,30 @@
+#!/bin/sh
+PLUGIN_NAME="plugin-relay"
+MAIN_EXE_NAME="relay"
+
+PLUGIN_PARAM=`cat /app/system/miner.${PLUGIN_NAME}.ipk/conf/param`
+PLUGIN_DIR="/app/system/miner.${PLUGIN_NAME}.ipk"
+PLUGIN_BIN_DIR="${PLUGIN_DIR}/bin"
+
+count=0
+
+while :
+do
+    procnum=`ps | grep -w ${MAIN_EXE_NAME} |grep -v plugin | grep -v monitor| grep -v grep| wc -l`
+    echo "`date +"%Y-%m-%d %H:%M:%S"`: procnum=$procnum" >>/tmp/.${PLUGIN_NAME}.log 2>&1
+    if [ $procnum -eq 0 ]; then
+        echo "restart ${PLUGIN_NAME}: ./${MAIN_EXE_NAME} ${PLUGIN_PARAM}" >>/tmp/.${PLUGIN_NAME}.log 2>&1
+        cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_PARAM}
+    else
+        echo "${PLUGIN_NAME} work ok" >>/tmp/.${PLUGIN_NAME}.log
+    fi
+
+    count=$(($count + 1))
+    if [ $count -gt 10 ]; then
+        count=0
+        echo "`date +"%Y-%m-%d %H:%M:%S"`: run log_split" >/tmp/.${PLUGIN_NAME}.log 2>&1
+        cd ${PLUGIN_BIN_DIR} && ./log_split >>/tmp/.${PLUGIN_NAME}.log 2>&1
+    fi
+
+    sleep 30
+done
