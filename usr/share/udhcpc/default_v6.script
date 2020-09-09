@@ -1,0 +1,99 @@
+#!/bin/sh
+
+# udhcpc script edited by Tim Riker <Tim@Rikers.org>
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc6" && exit 1
+
+log_devfile="/dev/null"
+lock_resolvconf="/tmp/resolvconf.lock"
+IPV6_FLAG="#ipv6"
+IPV6_LEASE_FILE=/tmp/realipv6.lease
+RESOLV_CONF="/etc/resolv.conf"
+RESOLV_DNSMASQ_CONF="/tmp/resolv.dnsmasq.conf"
+[ -e $RESOLV_CONF ] || touch $RESOLV_CONF
+[ -e $RESOLV_DNSMASQ_CONF ] || touch $RESOLV_DNSMASQ_CONF
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+case "$1" in
+	deconfig)
+		/sbin/ifconfig $interface up
+		#/sbin/ifconfig $interface 0.0.0.0
+
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -k $interface
+		fi
+		;;
+
+	leasefail|nak)
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -wD $interface --no-chroot
+		fi
+		;;
+
+	renew|bound)
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -k $interface
+		fi
+
+		if [ "${ipv6}" != "" ]; then
+			if [ -f "${IPV6_LEASE_FILE}" ]; then
+				releaseipv6=`cat ${IPV6_LEASE_FILE}`
+				if [ "${releaseipv6}" != "" ]; then
+					echo "release last ipv6 ${releaseipv6} ..."
+					ip addr del "${releaseipv6}" dev eth0
+				fi
+			fi
+		
+            echo "has ipv6 = $ipv6"
+			echo "${ipv6}/64" > ${IPV6_LEASE_FILE}
+		    ip addr add "${ipv6}/64" dev eth0 label eth0
+			ip link set eth0 up
+        fi
+
+		if [ -n "$router" ] ; then
+			for i in $router ; do
+				#route add default gw $i dev $interface
+				ip -6 route del default  dev eth0
+				ip route add "::/0" via $i dev $interface
+			done
+		fi
+		
+		touch ${lock_resolvconf}
+		if [ -f "${lock_resolvconf}" ]; then
+			{
+				echo "lock udhcpc6 start" >> "${log_devfile}"
+				flock 3
+				touch $RESOLV_DNSMASQ_CONF
+		
+					#echo -n "" > $RESOLV_DNSMASQ_CONF
+					sed -i "/${IPV6_FLAG}/d" $RESOLV_DNSMASQ_CONF
+					for i in $dns ; do
+						echo adding dns $i
+						echo "nameserver $i # $interface ${IPV6_FLAG}" >> $RESOLV_DNSMASQ_CONF
+					done
+				echo "lock udhcpc6 over" >> "${log_devfile}"
+			} 3<> ${lock_resolvconf}
+		else
+			touch $RESOLV_DNSMASQ_CONF
+		
+			#echo -n "" > $RESOLV_DNSMASQ_CONF
+			sed -i "/${IPV6_FLAG}/d" $RESOLV_DNSMASQ_CONF
+			for i in $dns ; do
+				echo adding dns $i
+				echo "nameserver $i # $interface ${IPV6_FLAG}" >> $RESOLV_DNSMASQ_CONF
+			done
+		fi
+
+		#touch $RESOLV_CONF
+		#grep -qe "127.0.0.1" $RESOLV_CONF || echo 'nameserver 127.0.0.1' >> $RESOLV_CONF
+		;;
+esac
+
+HOOK_DIR="$0.d"
+for hook in "${HOOK_DIR}/"*; do
+    [ -f "${hook}" -a -x "${hook}" ] || continue
+    "${hook}" "${@}"
+done
+
+exit 0

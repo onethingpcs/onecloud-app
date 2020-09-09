@@ -1,0 +1,8 @@
+#!/bin/sh
+
+timestamp=`date`
+
+echo "[$timestamp]usb hotplug handle[$DEVNAME][$DEVTYPE][$ACTION]" >>/tmp/mdev.log
+ubus call mnt hotplug "{\"dev_name\": \"$DEVNAME\", \"action\": \"$ACTION\"}"
+echo "forward hotplug msg to mnt: ubus call mnt hotplug "{\"dev_name\": \"$DEVNAME\", \"action\": \"$ACTION\"}"" >>/tmp/mdev.log
+echo "" >>/tmp/mdev.log

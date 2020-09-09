@@ -1,0 +1,27 @@
+#!/bin/sh
+OTC_BASE_DIR=/onecloud_base
+OTC_INFO_DIR=/tmp/.otc_info 
+BASEINFO_CONF=${OTC_INFO_DIR}/otc_baseinfo.txt 
+if [ -f "${BASEINFO_CONF}" ]; then 
+    TMP_BASE_DIR=`cat ${BASEINFO_CONF}` 
+    if [ ! -z "${TMP_BASE_DIR}" -a -d "${TMP_BASE_DIR}" ]; then 
+        echo ${TMP_BASE_DIR} ok; 
+        OTC_BASE_DIR=${TMP_BASE_DIR} 
+    else 
+        echo ${TMP_BASE_DIR} error; 
+    fi 
+else 
+    echo ${BASEINFO_CONF} not find 
+fi
+
+nice -n -10 /usr/sbin/ubusd -s /var/run/ubus.sock &
+sleep 1
+killall uhttpd
+
+if [ -d ${OTC_BASE_DIR}/thunder/www ];then
+     nice -n -10 uhttpd -p 127.0.0.1:80 -u /ubus -t 25 -a -h ${OTC_BASE_DIR}/thunder/www &
+else
+     nice -n -10 uhttpd -p 127.0.0.1:80 -u /ubus -t 25 -a &
+fi
+
+echo `date +%F_%T` "/usr/bin/monit_start_ubusd" >> /tmp/.monit.log

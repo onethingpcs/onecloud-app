@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Clean non existent log file entries from status file
+cd /var/lib
+test -e logrotate.status || touch logrotate.status
+head -1 logrotate.status > logrotate.status.clean
+sed 's/"//g' logrotate.status | while read logfile date
+do
+    [ -e "$logfile" ] && echo "\"$logfile\" $date"
+done >> logrotate.status.clean
+mv logrotate.status.clean logrotate.status
+
+test -x /usr/sbin/logrotate || exit 0
+/usr/sbin/logrotate  /etc/logrotate.conf
+

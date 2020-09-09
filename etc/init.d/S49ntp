@@ -1,0 +1,71 @@
+#! /bin/sh
+
+NAME=ntpd
+DAEMON=/usr/sbin/$NAME
+# Gracefully exit if the package has been removed.
+test -x $DAEMON || exit 0
+
+# Read config file if it is present.
+if [ -r /etc/default/$NAME ]
+then
+  . /etc/default/$NAME
+fi
+
+NTP_SERVERS1="ntp.ubuntu.com 2.cn.pool.ntp.org"
+
+NTP_SERVERS2="123.162.191.94 182.118.125.94 111.7.132.34 2001:67c:1560:8003::c8 2001:67c:1560:8003::c7 2a03:8600::cc 2402:f000:1:416:101:6:6:172"
+
+NTP_FLAG="/tmp/.ntpdate_success_flag"
+
+case "$1" in
+  start)
+    #if [ -f ${NTP_FLAG} ]; then
+    #    echo `date +%F_%T` "ntpdate already succeed ago" >> /tmp/.ntp.log
+    #    exit 0
+    #fi
+    rm -rf ${NTP_FLAG}
+    echo `date +%F_%T` "rm ${NTP_FLAG}" >> /tmp/.ntp.log
+
+    printf "Starting ntpdate: "
+    echo `date +%F_%T` "run ntpdate with domains" >> /tmp/.ntp.log
+    /usr/bin/timeout -t 20 /usr/bin/ntpdate ${NTP_SERVERS1}
+    ret=$?
+    if [ ${ret} -ne 0 ]; then 
+        echo `date +%F_%T` "run ntpdate fail, exitcode=${ret}" >> /tmp/.ntp.log
+        echo `date +%F_%T` "run ntpdate with hosts" >> /tmp/.ntp.log
+        /usr/bin/timeout -t 10 /usr/bin/ntpdate ${NTP_SERVERS2}
+        ret=$?
+    fi
+
+    if [ ${ret} -eq 0 ]; then 
+        echo `date +%F_%T` "SUCCESS, create ${NTP_FLAG}" >> /tmp/.ntp.log
+        touch ${NTP_FLAG} 2>> /tmp/.ntp.log
+    else
+        echo `date +%F_%T` "run ntpdate fail, exitcode=${ret}" >> /tmp/.ntp.log
+        echo `date +%F_%T` "ALL FAIL" >> /tmp/.ntp.log
+    fi
+
+    printf "Starting $NAME: "
+    start-stop-daemon -S -q -x $DAEMON -- -g
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  stop)
+    printf "Stopping $NAME: "
+    echo `date +%F_%T` "stop, remove ${NTP_FLAG}" >> /tmp/.ntp.log
+    rm ${NTP_FLAG} 2>/dev/null
+    start-stop-daemon -K -q -n $NAME
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  restart|reload)
+    echo "Restarting $NAME: "
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|reload}" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

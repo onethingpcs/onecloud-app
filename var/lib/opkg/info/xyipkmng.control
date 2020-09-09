@@ -1,0 +1,9 @@
+Package: xyipkmng
+Priority: optional
+Version: V1.2.9
+Architecture: s905d
+Maintainer: xlwthink<xlwthink@xunlei.com>
+Depends:
+Source: null
+Section: extras
+Description: Xunlei miner software.

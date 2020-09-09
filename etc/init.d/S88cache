@@ -1,0 +1,18 @@
+#!/bin/sh
+
+case "$1" in
+    start)
+        /sbin/blkid /dev/cache && /usr/sbin/e2fsck -fy /dev/cache > /tmp/fsck_dev_cache.log
+        mount /dev/cache /var/cache || ((sleep 3;echo y) | mkfs.ext4 /dev/cache && mount /dev/cache /var/cache) &
+        ;;
+    stop)
+        ;;
+    restart|reload)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?
+

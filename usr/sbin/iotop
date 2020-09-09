@@ -1,0 +1,20 @@
+#!/usr/bin/python
+# iotop: Display I/O usage of processes in a top like UI
+# Copyright (c) 2007, 2008 Guillaume Chazarain <guichaz@gmail.com>, GPLv2
+# See iotop --help for some help
+
+from __future__ import print_function
+import sys
+
+try:
+    from iotop.ui import main
+except ImportError as e:
+    print(e)
+    print('To run an uninstalled copy of iotop,')
+    print('launch iotop.py in the top directory')
+else:
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    sys.exit(0)

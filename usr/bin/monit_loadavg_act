@@ -1,0 +1,47 @@
+#!/bin/sh
+[ -f "/tmp/.monit_is_rebooting" ] && exit 0
+touch "/tmp/.monit_is_rebooting"
+
+echo `date +%F_%T` "loadavg is over 80 for 10 minutes, need to reboot." >>/tmp/.monit.log
+
+excp_time=`date +%F_%T`
+date=`echo $excp_time | cut -f1 -d _`
+count=`ls /app/.monit | grep $date | wc -l`
+if [ "$count" -ge 5 ]; then
+    sys_uptime=`cat /proc/uptime |cut -f1 -d .`
+    if [ "$sys_uptime" -lt 3600 ]; then 
+        echo `date +%F_%T` "But today we have reboot $count times, and uptime = $sys_uptime s, do nothing." >>/tmp/.monit.log
+        exit 0
+    fi 
+fi
+
+prepare_reboot()
+{
+    echo `date +%F_%T` "sync; reboot" >>/tmp/.monit.log
+    echo "[monit]loadavg is over 80 for 10 minutes. sync; reboot" > /dev/console
+
+    touch /app/.need_delay  # This flag is used to decide whether some ipk should be delay start.
+    mkdir -p /app/.monit
+    touch /app/.monit/$excp_time
+
+    monit status `hostname` |grep load > /app/.monit/load
+    sleep 1
+    monit status `hostname` |grep cpu > /app/.monit/cpu
+    sleep 1
+    monit status `hostname` |grep memory > /app/.monit/memory
+    sleep 1
+    monit status `hostname` |grep "uptime " > /app/.monit/uptime
+
+    echo $excp_time >/app/.monit/loadavg_excp_time
+}
+# This function will access disk, may block, so use `&`
+prepare_reboot &
+sleep 15   # give 15 second to prepare_reboot()
+
+# there is `sync` in `reboot`,we rely on it to save '/app/.monit/*', but it may block, so use `&`
+(ubus call xyipk start '{"package":"plugin-dockerd"}' -t 3) &
+sleep 5
+(reboot -f) &  
+sleep 300
+
+echo "b" > /proc/sysrq-trigger

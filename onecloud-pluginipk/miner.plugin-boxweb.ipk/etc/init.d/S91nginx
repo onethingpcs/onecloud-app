@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# Start/stop nginx
+#
+
+PREFIX="/onecloud-pluginipk/miner.plugin-boxweb.ipk"
+NGINX="${PREFIX}/usr/sbin/nginx"
+PIDFILE="/var/run/nginx.pid"
+
+export PATH=$PATH:${PREFIX}/usr/bin:${PREFIX}/usr/sbin
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PREFIX}/lib
+
+case "$1" in
+    start)
+    
+    sn=`cat /tmp/.efuse_sn`
+    if [ -n "$sn" ];then 
+        len=${#sn}
+        let password_index=$len-6
+        password=${sn:$password_index:6}
+        user=${password}
+
+        if [ ! -f ${PREFIX}/etc/nginx/auth_passwd ]; then
+		    echo "create ${PREFIX}/etc/nginx/auth_passwd and add new user $user"
+            printf "$user:$(openssl passwd $password)\n" > ${PREFIX}/etc/nginx/auth_passwd
+        else
+            user_exist=`cat ${PREFIX}/etc/nginx/auth_passwd |grep $user`
+            if [ -z "$user_exist" ];then 
+                echo "add new user to ${PREFIX}/etc/nginx/auth_passwd"
+                printf "$user:$(openssl passwd $password)\n" >> ${PREFIX}/etc/nginx/auth_passwd
+            fi
+        fi
+    else
+        echo "sn not find"
+        if [ ! -f ${PREFIX}/etc/nginx/auth_passwd ]; then
+            echo "create ${PREFIX}/etc/nginx/auth_passwd and add default user 123456"
+            password="123456"
+            user="123456"
+            printf "$user:$(openssl passwd $password)\n" > ${PREFIX}/etc/nginx/auth_passwd
+        fi
+    fi
+
+	echo "Starting nginx..."
+    # make sure fcgiwrap is running before start nginx
+    while true
+    do
+        fcgiwrap_exist=`ps |grep fcgiwrap |grep -v grep`
+        if [ -z "$fcgiwrap_exist" ]; then
+            rm -f /run/fcgiwrap.socket
+            echo "Starting fcgiwrap..."
+		    fcgiwrap -f -s unix:/run/fcgiwrap.socket &
+            sleep 2
+        else
+            echo "Start fcgiwrap success"
+            break
+        fi
+    done
+	mkdir -p /var/log/nginx /var/tmp/nginx
+	start-stop-daemon -S -x "$NGINX" -p "$PIDFILE" -- -p ${PREFIX} -c ${PREFIX}/etc/nginx/nginx.conf
+	;;
+    stop)
+    echo "Stopping nginx..."
+    start-stop-daemon -K -x "$NGINX" -p "$PIDFILE" -o
+    ;;
+    reload|force-reload)
+    echo "Reloading nginx configuration..."
+	"$NGINX" -s reload -c ${PREFIX}/etc/nginx/nginx.conf
+	;;
+    restart)
+	"$0" stop
+	sleep 1 # Prevent race condition: ensure nginx stops before start.
+	"$0" start
+	;;
+    *)
+	echo "Usage: $0 {start|stop|restart|reload|force-reload}"
+	exit 1
+esac

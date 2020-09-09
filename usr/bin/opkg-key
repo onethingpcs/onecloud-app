@@ -1,0 +1,109 @@
+#!/bin/sh
+
+# Based on apt-key from apt-0.6.25
+# Licensed under GPL Version 2
+
+set -e
+
+usage() {
+    echo "Usage: opkg-key [options] command [arguments]"
+    echo
+    echo "Manage opkg's list of trusted keys"
+    echo
+    echo "Commands and arguments:"
+    echo "  add <file>          - Add the key contained in <file> ('-' for stdin)"
+    echo "  del <keyid>         - Remove the key <keyid>"
+    echo "  list                - List keys"
+    echo "  fingerprint         - List keys with fingerprints"
+    echo "  reset               - Remove all keys, resetting the keyring"
+    echo "  populate            - Import keys from /usr/share/opkg/keyrings"
+    echo "  help                - Print this usage message and exit"
+    echo
+    echo "Options:"
+    echo "  -o <root>           - Use <root> as the offline root directory"
+    echo
+}
+
+if [ "$1" = "-o" ]; then
+  ROOT=$2
+  shift 2
+  echo "Note: using \"$ROOT\" as root path"
+else
+  ROOT=""
+fi
+
+CFGROOT="$ROOT/etc/opkg"
+
+command="$1"
+if [ -z "$command" ]; then
+    usage
+    exit 1
+fi
+shift
+
+# For the particular use case we have in importing/trusting keys the
+# differences between gpg and gpg2 are moot.
+if [ -f "$(which gpg)" ]; then
+    GPGCMD="gpg"
+elif [ -f "$(which gpg2)" ]; then
+    GPGCMD="gpg2"
+else
+    echo >&2 "Error: gnupg does not appear to be installed."
+    exit 1
+fi
+
+# We don't use a secret keyring, of course, but gpg panics and
+# implodes if there isn't one available
+
+GPG="$GPGCMD --no-options --no-default-keyring --keyring $CFGROOT/trusted.gpg --secret-keyring $CFGROOT/secring.gpg --trustdb-name $CFGROOT/trustdb.gpg"
+
+case "$command" in
+    add)
+        $GPG --quiet --batch --import "$1"
+        ret=$?
+        if [ $ret -eq 0 ]; then
+            echo "OK"
+        else
+            echo "Failed"
+        fi
+        ;;
+    del|rm|remove)
+        $GPG --quiet --batch --delete-key --yes "$1"
+        ret=$?
+        if [ $ret -eq 0 ]; then
+            echo "OK"
+        else
+            echo "Failed"
+        fi
+        ;;
+    list)
+        $GPG --batch --list-keys
+        ;;
+    finger*)
+        $GPG --batch --fingerprint
+        ;;
+    adv*)
+        echo "Executing: $GPG $*"
+        $GPG $*
+        ;;
+    reset)
+        rm -f $CFGROOT/trusted.gpg $CFGROOT/trusted.gpg~
+        rm -f $CFGROOT/secring.gpg $CFGROOT/secring.gpg~
+        rm -f $CFGROOT/trustdb.gpg $CFGROOT/trustdb.gpg~
+        echo "OK"
+        ;;
+    populate)
+        for f in $ROOT/usr/share/opkg/keyrings/*.gpg; do
+            echo "Importing keys from '`basename $f`'..."
+            $GPG --quiet --batch --import "$f"
+        done
+        echo "OK"
+        ;;
+    help)
+        usage
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac

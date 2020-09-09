@@ -1,0 +1,36 @@
+#!/bin/sh
+# /usr/lib/sa/sa1
+# (C) 1999-2016 Sebastien Godard (sysstat <at> orange.fr)
+#
+#@(#) sysstat-11.4.3
+#@(#) sa1: Collect and store binary data in system activity data file.
+#
+
+# Set default value for some variables.
+# Used only if ${SYSCONFIG_DIR}/sysstat doesn't exist!
+HISTORY=0
+SADC_OPTIONS=""
+SA_DIR=/var/log/sa
+SYSCONFIG_DIR=/etc/sysconfig
+umask 0022
+
+[ -r ${SYSCONFIG_DIR}/sysstat ] && . ${SYSCONFIG_DIR}/sysstat
+[ -d ${SA_DIR} ] || SA_DIR=/var/log/sa
+
+if [ ${HISTORY} -gt 28 ]
+then
+	SADC_OPTIONS="${SADC_OPTIONS} -D"
+fi
+
+ENDIR=/usr/lib/sa
+cd ${ENDIR}
+[ "$1" = "--boot" ] && shift && BOOT=y || BOOT=n
+if [ $# = 0 ] && [ "${BOOT}" = "n" ]
+then
+# Note: Stats are written at the end of previous file *and* at the
+# beginning of the new one (when there is a file rotation) only if
+# outfile has been specified as '-' on the command line...
+	exec ${ENDIR}/sadc -F -L ${SADC_OPTIONS} 1 1 ${SA_DIR}
+else
+	exec ${ENDIR}/sadc -F -L ${SADC_OPTIONS} $* ${SA_DIR}
+fi

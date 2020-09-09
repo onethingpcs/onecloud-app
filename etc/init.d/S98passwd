@@ -1,0 +1,11 @@
+#sleep 10
+check_pswd=`cat /etc/shadow | grep "root:" | awk NR==1 | awk -F':' '{print $2}'`
+
+if [ "${check_pswd}" = "" ]; then
+    echo "no has passwd" > /tmp/S98.log
+    myhostname=`hostname | awk -F'_' '{print $2}'`
+    mypswd="${myhostname}""s9052019"
+    (echo ${mypswd}; sleep 1; echo ${mypswd}) | passwd root
+else
+    echo "already has passwd" > /tmp/S98.log
+fi

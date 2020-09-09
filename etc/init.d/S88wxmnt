@@ -1,0 +1,624 @@
+#!/bin/sh
+
+wxlog=/tmp/wxmnt.log
+app_mnt=/tmp/app_mnt
+
+OTC_INFO_DIR=/tmp/.otc_info
+APPINFO_CONF=${OTC_INFO_DIR}/otc_appinfo.txt
+BASEINFO_CONF=${OTC_INFO_DIR}/otc_baseinfo.txt
+WX_BASE_PART_CONF=${OTC_INFO_DIR}/base_part_conf.txt
+
+WX_BASE_PART_DIR=/instaboot
+WX_BASE_INSTALL_DIR=/otc_base
+
+FS_OTC_BASE_DIR=/onecloud_base
+FS_OTC_APP_DIR=/onecloud_app
+
+save_info_conf()
+{
+	if [ -z "${2}" ]; then
+		echo "save_info_conf ${2} failed..."
+		echo "save_info_conf ${2} failed..." >> ${wxlog}
+	fi
+
+	echo "${1}" > ${2}
+}
+
+check_md5_file()
+{
+    local md5must=`echo $line | awk '{ print $1 }'`
+    local filename=`echo $line | awk '{ print $2 }'`
+
+    local md5real=`md5sum "${app_mnt}/${filename}" | awk '{ print $1 }'`
+    if [ "${md5must}" != "${md5real}" ]; then
+        echo "file md5 not match, filename ${filename}, must ${md5must}, real ${md5real}" >> ${wxlog}
+        return 1
+    fi
+
+    return 0
+}
+
+check_md5_app_list()
+{
+    local md5_file=${app_mnt}/thunder/scripts/md5sum.list
+    if [ ! -f "${md5_file}" ]; then
+        echo "no md5 list file" >> ${wxlog}
+        return 0
+    fi
+
+    while read line
+    do
+        echo "check line $line"
+        check_md5_file "$line"
+        if [ $? -ne 0 ]; then
+            # app may damaged
+            return 1
+        fi
+    done < ${md5_file}
+
+	return 0
+}
+
+back_wx_app_mnt() # use new wx_app_mnt to replace it
+{
+	#wxlog=/dev/console #for debug
+	app_master_file=/misc/app_master
+    if [ ! -f "${app_master_file}" ]; then
+        return 0
+    fi
+    
+    #rm -rf ${wxlog}
+
+    # get the master/backup parition name from /misc/master file
+    local app_master=`cat ${app_master_file}`
+	echo ${app_master_file}
+    local app_dev=
+
+    if [ "$app_master" != "/dev/app0" -a "$app_master" != "/dev/app1" ]; then
+        # flag not set
+        echo "master file not set correctly" >> ${wxlog}
+        return 0
+    else
+        app_dev=${app_master}
+    fi
+
+    echo "use partition for app ${app_dev}" >> ${wxlog}
+
+    # mount the partition
+    
+    mkdir -p ${app_mnt}
+    chmod 755 ${app_mnt}
+    echo "try to umount ${app_dev}" >> ${wxlog}
+    umount ${app_dev} > /dev/null 2>&1
+
+    echo "try to fsck ${app_dev}" >> ${wxlog}
+    /usr/sbin/fsck.ext4 -p -c ${app_dev}
+
+    echo "try to mount ${app_dev} to ${app_mnt}" >> ${wxlog}
+    mount -t ext4 ${app_dev} ${app_mnt}
+    if [ $? -ne 0 ]; then
+        # mount failed
+        echo "mount failed" >> ${wxlog}
+        return 1
+    fi
+
+    # check the data in partition
+    check_md5_app_list
+    if [ $? -ne 0 ]; then
+        echo "app data may damaged !!!" >> ${wxlog}
+        umount ${app_dev}
+        return 2
+    fi
+
+    # mount bind to /thunder
+    if [ ! -e /thunder ]; then
+        echo "/thunder is not exist. try to mkdir it" >> ${wxlog}
+        mkdir /thunder
+        if [ $? -ne 0 ]; then
+            # mkdir failed
+            echo "mkdir failed" >> ${wxlog}
+            umount ${app_dev}
+            return 3
+        fi
+    fi
+
+    echo "try to mount bind ${app_mnt}/thunder to /thunder" >> ${wxlog}
+    mount -o bind "${app_mnt}/thunder" /thunder
+    if [ $? -ne 0 ]; then
+        # mount bind failed
+        echo "mount bind failed" >> ${wxlog}
+        umount ${app_dev}
+        return 4
+    fi
+
+    echo "mount app partition success" >> ${wxlog}
+    return 0
+}
+
+wx_app_mnt()
+{
+	#wxlog=/dev/console #for debug
+	
+	local app_mount=${FS_OTC_APP_DIR}
+	local app_master=
+    local app_dev=
+	#default set
+	save_info_conf ${app_mount} ${APPINFO_CONF}
+	
+	app_master_file=/misc/app_master
+    if [ ! -f "${app_master_file}" ]; then
+		echo "${app_master_file} not exist, use sys app" >> ${wxlog}
+        return 0
+    fi
+	echo ${app_master_file}
+
+	# get the master/backup parition name from /misc/master file
+    app_master=`cat ${app_master_file}`
+    if [ "$app_master" != "/dev/app0" -a "$app_master" != "/dev/app1" ]; then
+        # flag not set
+        echo "master file not set correctly" >> ${wxlog}
+        return 0
+    else
+        app_dev=${app_master}
+    fi
+
+    echo "use partition for app ${app_dev}" >> ${wxlog}
+
+    # mount the partition
+    
+    mkdir -p ${app_mnt}
+    chmod 755 ${app_mnt}
+    echo "try to umount ${app_dev}" >> ${wxlog}
+    umount ${app_dev} > /dev/null 2>&1
+
+    echo "try to fsck ${app_dev}" >> ${wxlog}
+    /usr/sbin/fsck.ext4 -p -c ${app_dev}
+
+    echo "try to mount ${app_dev} to ${app_mnt}" >> ${wxlog}
+    mount -t ext4 ${app_dev} ${app_mnt}
+    if [ $? -ne 0 ]; then
+        # mount failed
+        echo "mount failed" >> ${wxlog}
+        return 1
+    fi
+
+    # check the data in partition
+    #check_md5_app_list
+	wx_check_md5_list ${app_mnt}
+    if [ $? -ne 0 ]; then
+        echo "app data may damaged !!!" >> ${wxlog}
+        umount ${app_dev}
+        return 2
+    fi
+
+	if [ ! -d "${app_mount}" -o -h "${app_mount}" ]; then 
+		# don't add -r
+		echo "${app_mount} is not a dir" >> ${wxlog}
+		rm -f ${app_mount}
+	fi
+
+	mkdir -p ${app_mount}
+
+    echo "try to mount bind ${app_mnt}/thunder to ${app_mount}" >> ${wxlog}
+    mount -o bind "${app_mnt}" ${app_mount}
+    if [ $? -ne 0 ]; then
+        # mount bind failed
+        echo "mount bind failed" >> ${wxlog}
+        umount ${app_dev}
+        return 4
+    fi
+
+    echo "mount app partition success" >> ${wxlog}
+	save_info_conf ${app_mount} ${APPINFO_CONF}
+    return 0
+}
+
+wx_check_md5_file()
+{
+	local check_dir=${1}
+    local md5must=`echo $line | awk '{ print $1 }'`
+    local filename=`echo $line | awk '{ print $2 }'`
+
+    local md5real=`md5sum "${check_dir}/${filename}" | awk '{ print $1 }'`
+    if [ "${md5must}" != "${md5real}" ]; then
+        echo "file md5 not match, filename ${filename}, must ${md5must}, real ${md5real}" >> ${wxlog}
+        return 1
+    fi
+
+    return 0
+}
+
+wx_check_md5_list()
+{
+    local md5_file=${1}/thunder/scripts/md5sum.list
+    if [ ! -f "${md5_file}" ]; then
+		# If compatibility is not considered, it is best to return error; (check the inportant bin file in other ways )
+        echo "${1} don't have md5_list_file, maybe it's a hard error...." >> ${wxlog}
+        return 2
+    fi
+
+    while read line
+    do
+        echo "check ${1} line $line"
+        wx_check_md5_file ${1}
+        if [ $? -ne 0 ]; then
+            # app may damaged
+            return 1
+        fi
+    done < ${md5_file}
+
+	return 0
+}
+
+check_and_create_base_dir()
+{
+	#don't need fsck, it fsck by kernel when mount overlayfs
+	
+	if [ ! -d "${WX_BASE_PART_DIR}" ]; then
+		rm -f ${WX_BASE_PART_DIR}
+	fi
+	
+	mkdir -p ${WX_BASE_PART_DIR}
+	
+	local result=`mount | grep "on ${WX_BASE_PART_DIR}"`
+	if [ -z "${result}" ]; then 
+		echo "mount ${WX_BASE_PART_DIR} first"
+		mount -t ext4 /dev/instaboot ${WX_BASE_PART_DIR}
+	else
+		echo "mount ${WX_BASE_PART_DIR} already"
+	fi
+	
+	if [ ! -d "${WX_BASE_PART_DIR}${WX_BASE_INSTALL_DIR}" ]; then
+		rm -f ${WX_BASE_PART_DIR}${WX_BASE_INSTALL_DIR}
+	fi
+	mkdir -p ${WX_BASE_PART_DIR}${WX_BASE_INSTALL_DIR} 
+	echo "${WX_BASE_PART_DIR}${WX_BASE_INSTALL_DIR}" > ${WX_BASE_PART_CONF}
+}
+
+check_ipk_version()
+{
+	local version1=${1}
+	local version2=${2}
+	
+	local ver1_1=`echo ${version1} | awk -F'.' '{print $1}'`
+	local ver1_2=`echo ${version1} | awk -F'.' '{print $2}'`
+	local ver1_3=`echo ${version1} | awk -F'.' '{print $3}'`
+	
+	#echo "ver1_1 = ${ver1_1}, ver1_2 = ${ver1_2}, ver1_3 = ${ver1_3}"
+	
+	local ver2_1=`echo ${version2} | awk -F'.' '{print $1}'`
+	local ver2_2=`echo ${version2} | awk -F'.' '{print $2}'`
+	local ver2_3=`echo ${version2} | awk -F'.' '{print $3}'`
+	
+	#echo "ver1_1 = ${ver2_1}, ver1_2 = ${ver2_2}, ver2_3 = ${ver2_3}"
+	
+	local version1_value=$((ver1_1*1000000+ver1_2*1000+ver1_3))
+	local version2_value=$((ver2_1*1000000+ver2_2*1000+ver2_3))
+	
+	echo "version1_value = ${version1_value}, version2_value = ${version2_value}" >> ${wxlog}
+	if [ ${version1_value} -gt ${version2_value} ]; then 
+		echo "$version1_value > $version2_value" >> ${wxlog}
+		return 0;
+	else
+		echo "$version1_value <= $version2_value" >> ${wxlog}
+		return 1;
+	fi
+}
+
+wx_base_mnt()
+{
+	#wxlog=/dev/console #for debug
+	check_and_create_base_dir
+	
+	local base_mount=${FS_OTC_BASE_DIR}
+    local base_dev=
+	local base_master=
+	#set default
+	save_info_conf ${base_mount} ${BASEINFO_CONF}
+	
+	base_master_file=/misc/base_master
+    if [ ! -f "${base_master_file}" ]; then
+		echo "${base_master_file} not exist, use sys base" >> ${wxlog}
+        return 0
+    fi
+	#echo ${base_master_file}
+
+	# get the master/backup parition name from /misc/master file
+	base_master=`cat ${base_master_file}`
+    #if [ "${base_master}" != "/otc_base0" -a "${base_master}" != "/otc_base1" ]; then
+	if [ -z "${base_master}" ]; then
+		echo "${base_master_file} not set correctly, use sys base" >> ${wxlog}
+		return 0
+    else
+		#has md5 check, don't need check dir...
+        base_dev=${base_master}
+    fi
+
+    echo "use partition for base ${base_dev}" >> ${wxlog}
+
+    # check the data in partition
+    wx_check_md5_list ${base_dev}
+    if [ $? -ne 0 ]; then
+        echo "base data may damaged !!!" >> ${wxlog}
+        #umount ${base_dev}
+        return 2
+    fi
+	
+	if [ -s ${FS_OTC_BASE_DIR}/thunder/.img_date -a -s ${base_dev}/thunder/.img_date ]; then 
+		echo "version file find ok" >> ${wxlog}
+	else
+		echo "version file find failed !!!" >> ${wxlog}
+		return 3
+	fi
+	
+	local version_cur=`cat ${base_dev}/thunder/.img_date | awk -F'-' '{print $4}' | awk -F'V' '{print $2}'`
+	local version_rootfs=`cat ${FS_OTC_BASE_DIR}/thunder/.img_date | awk -F'-' '{print $4}' | awk -F'V' '{print $2}'`
+	
+	check_ipk_version ${version_cur} ${version_rootfs}
+	if [ $? -ne 0 ]; then
+        echo "check_baseipk_version failed" >> ${wxlog}
+        #umount ${base_dev}
+        return 3
+	else
+		echo "check_baseipk_version ok" >> ${wxlog}
+    fi
+
+    # use the partition/real base dir (maybe first check if has samename dir...)
+	if [ ! -d "${base_mount}" -o -h "${base_mount}" ]; then
+		rm ${base_mount} -f
+		echo "${base_mount} is not a dir, rm it..." >> ${wxlog}
+	fi
+	
+	mkdir -p ${base_mount}
+	mount -o bind ${base_dev} ${base_mount}
+	if [ $? -ne 0 ]; then
+		echo "mount/bind ${base_dev} ${base_mount} fail" >> ${wxlog}
+		return 4
+	else
+		echo "mount base partition success" >> ${wxlog}
+		save_info_conf ${base_mount} ${BASEINFO_CONF}
+	fi
+
+    return 0
+}
+
+wx_xyipk_preinstall()
+{
+	local xyipk_dirname=miner.xyipkmng.ipk
+	local xyipk_rootfs_dir=/app
+	local xyipk_tmp_dir=/tmp/xyipk_check_ver
+	local version_file=${xyipk_dirname}/.version_date
+	local preinstall_flag='/xyipk_preinstall.flag'
+	local xyipk_dev=/dev/data
+	local continue_install=0
+	local need_install=0
+	
+	echo "xyipk preinstall check ..." >> ${wxlog}
+	type_flag=`blkid -s TYPE ${xyipk_dev} | awk -F"\"" '{print $2}'`
+	if [ "${type_flag}" != "ext4" ]; then
+		echo "xyipk don't need preinstall here" >> ${wxlog}
+		return 0;
+	else
+		e2fsck -fy ${xyipk_dev}
+		mkdir -p ${xyipk_tmp_dir}
+		mount -t ext4 ${xyipk_dev} ${xyipk_tmp_dir}
+		echo "mount ${xyipk_dev} result = $?" >> ${wxlog}
+	fi
+	
+	if [ -f "${preinstall_flag}" ]; then
+		echo "xyipk has last preinstall, may continue install it..." >> ${wxlog}
+		continue_install=1
+	fi
+	
+	if [ ! -f "${xyipk_tmp_dir}/${version_file}" -o  ! -f "${xyipk_rootfs_dir}/${version_file}" ]; then
+		echo "xyipk hasn't version file" >> ${wxlog}
+		if [ ${continue_install} -eq 0 ]; then
+			echo "xyipk hasn't last preinstall, use default S90xyipkmng flow..." >> ${wxlog}
+			umount ${xyipk_tmp_dir}
+			return 0
+		fi
+	fi
+	
+	if [ ${continue_install} -eq 0 ]; then
+		local xyipk_ver_cur=`cat ${xyipk_tmp_dir}/${version_file} | awk -F'-' '{print $4}' | awk -F'V' '{print $2}'`
+		local xyipk_ver_rootfs=`cat ${xyipk_rootfs_dir}/${version_file} | awk -F'-' '{print $4}' | awk -F'V' '{print $2}'`
+		if [ "${xyipk_ver_cur}" = "" ]; then
+			echo "xyipk cur version is lose, preinstall it" >> ${wxlog}
+		else
+			check_ipk_version ${xyipk_ver_rootfs} ${xyipk_ver_cur}
+			if [ $? -eq 0 ]; then
+				echo "check_xyipk_version failed, preinstall it" >> ${wxlog}
+			else
+				echo "check_xyipk_version ok, don't need preinstall..." >> ${wxlog}
+				umount ${xyipk_tmp_dir}
+				return 0;
+			fi
+		fi
+	fi
+	
+	echo "xyipk preinstall start..." >> ${wxlog}
+	echo "preinstall xyipk" >> ${preinstall_flag}
+	sync
+	rm -rf ${xyipk_tmp_dir}/${xyipk_dirname}
+	cp -arf ${xyipk_rootfs_dir}/${xyipk_dirname} ${xyipk_tmp_dir}
+	rm -f ${preinstall_flag}
+	umount ${xyipk_tmp_dir}
+	sync
+	echo "xyipk preinstall end..."   >> ${wxlog}
+}
+
+bootstrap_env_check()
+{
+	local rootfs_mtd=`df -h | grep -w "/" | awk '{print $1}'`
+	local env_bootup_flag=`fw_printenv | grep "second_rootfs_load=" | awk -F'=' '{print $2}'`
+	local env_ver=`fw_printenv | grep "xl_rootfs_version=" | awk -F'=' '{print $2}'`
+	local rootfs_ver_file="/.ver"
+	local kernel_mtd=`fw_printenv | awk '/^(bootpart=)/{print $0}' | awk -F'=' '{print $2}'`
+	local env_bootup_k_flag=`fw_printenv | grep "second_image_load=" | awk -F'=' '{print $2}'`
+	local kernel_env_ver=`fw_printenv | grep "xl_kernel_ver=" | awk -F'=' '{print $2}'`
+	local system_ver_file="/.sys_ver"
+	local system_env_ver=`fw_printenv | grep "xl_system_ver=" | awk -F'=' '{print $2}'`	
+
+	# rootfs package has a version indicated by file "/.ver" and dismatch which recorded in env,update it
+	if [ -f $rootfs_ver_file ]; then
+    		rootfs_ver=`cat $rootfs_ver_file`
+    
+    		if [ -n "$rootfs_ver" ]; then
+        		[ "$env_ver" = "$rootfs_ver" ] || fw_setenv xl_rootfs_version $rootfs_ver
+    		
+		fi
+	else
+		echo "file [$rootfs_ver_file] not exist" >> ${wxlog}
+	fi
+	
+	# system package own version file '/.sys_ver',update record in env if needed
+	if [ -f $system_ver_file ]; then
+		system_ver=`cat $system_ver_file`
+		
+		if [ -n "$system_ver" ]; then
+			[ "$env_ver" = "$system_ver" ] || fw_setenv xl_rootfs_version $system_ver
+			[ "$kernel_env_ver" = "$system_ver" ] || fw_setenv xl_kernel_ver $system_ver
+			[ "$system_env_ver" = "$system_ver" ] || fw_setenv xl_system_ver $system_ver
+		fi
+	else
+		echo "file [$system_ver_file] not exist" >> ${wxlog}
+	fi
+
+	if [ "${rootfs_mtd}" = "overlay" ]; then
+		real_sys_rootfs=`mount | grep "overlay" | awk -F"lowerdir=" '{print $2}' | awk -F"," '{print $1}'`
+		#rootfs_mtd=`df -h | grep -w "${real_sys_rootfs}" | awk '{print $1}'`
+		rootfs_mtd=`mount | grep -w "on ${real_sys_rootfs}" | awk '{print $1}'`
+		echo "rootfs use overlayfs, find low fs ${rootfs_mtd}" >> ${wxlog}
+	fi
+
+	# actually bootup rootfs partition dismatch,correct it
+	if [ "$rootfs_mtd" = "/dev/system" ]; then
+    		[ "$env_bootup_flag" = "off" ] || fw_setenv second_rootfs_load off
+	elif [ "$rootfs_mtd" = "/dev/backup" ]; then
+    		[ "$env_bootup_flag" = "on" ] || fw_setenv second_rootfs_load on
+
+	else
+		echo "unknown bootup mtd [$rootfs_mtd]" >> ${wxlog}
+    		return 1
+	fi
+
+	# actually bootup kernel partition dismatch,correct it
+	if [ "$kernel_mtd" = "boot" ]; then
+		[ "$env_bootup_k_flag" = "off" ] || fw_setenv second_image_load off
+	elif [ "$kernel_mtd" = "kernel" ]; then
+		[ "$env_bootup_k_flag" = "on"  ] || fw_setenv second_image_load on
+	else
+		echo "unknown kernel mtd [$kernel_mtd]" >> ${wxlog}
+		return 1
+	fi
+
+	return 0
+}
+
+wx_file_check_md5()
+{
+    local src_etc_file=${1}
+	local des_etc_file=${2}
+
+    local src_md5=`md5sum "${src_etc_file}" | awk '{ print $1 }'`
+	local dst_md5=`md5sum "${des_etc_file}" | awk '{ print $1 }'`
+    if [ "${src_md5}" != "${dst_md5}" ]; then
+        echo "file md5 not match, ${src_etc_file}, ${des_etc_file}" >> ${wxlog}
+        return 1
+    fi
+
+    return 0
+}
+
+misc_check_etc_cp()
+{
+	local src_check_dir=${1}
+	local dst_check_dir=${2}
+	for mysrcfile in $(find ${src_check_dir}"/")
+	do 
+		if [ -f "${mysrcfile}" ]; then 
+			mydstfile=${dst_check_dir}""${mysrcfile#${src_check_dir}}
+			wx_file_check_md5 ${mysrcfile} ${mydstfile}
+			if [ $? -ne 0 ]; then 
+				echo "misc_check_etc_cp ${mysrcfile} ${mydstfile} error"
+				return 1;
+			fi
+		fi
+	done
+	
+	return 0;
+}
+
+misc_mount_and_init()
+{
+	echo "start misc_mount_and_init"
+	mkdir -p /misc
+	misc_info=`mount | grep "/dev/misc"`
+	if [ "${misc_info}" = "" ]; then
+		e2fsck -fy /dev/misc
+		mount /dev/misc /misc
+		echo "misc fsck and mount ok..." >> ${wxlog} 
+	else
+		echo "misc mount already whitout fsck..." >> ${wxlog} 
+	fi
+
+	SYS_THUNDER_ETC=/thunder/etc
+	MISC_THUNDER_ETC=/misc/thunder/etc
+	MISC_ERR_FLAG=/misc/misc_etc_err_flag
+	SYS_THUNDER_ETC_OK=${SYS_THUNDER_ETC}/misc_etc_ok_flag
+
+	if [ ! -d "${SYS_THUNDER_ETC}" -o -h "${SYS_THUNDER_ETC}" ]; then 
+		# don't add -rf
+		echo "${SYS_THUNDER_ETC} is not a dir, rm it..." >> ${wxlog}
+		rm -f ${SYS_THUNDER_ETC}
+	fi
+	
+	if [ -d "${SYS_THUNDER_ETC}" -a ! -f "${SYS_THUNDER_ETC_OK}" ]; then
+		mkdir -p ${MISC_THUNDER_ETC}
+		cp -arf ${SYS_THUNDER_ETC}/. ${MISC_THUNDER_ETC}
+		if [ $? -ne 0 ]; then
+			echo "misc init, cp ${SYS_THUNDER_ETC} to misc failed " >> ${wxlog}
+			touch ${MISC_ERR_FLAG}
+		else
+			misc_check_etc_cp ${SYS_THUNDER_ETC} ${MISC_THUNDER_ETC}
+			if [ $? -ne 0 ]; then
+				echo "misc init, cp ${SYS_THUNDER_ETC} to misc md5 failed " >> ${wxlog}
+				touch ${MISC_ERR_FLAG}
+			else
+				echo "misc init, cp ${SYS_THUNDER_ETC} to misc ok " >> ${wxlog}
+				rm -f ${MISC_ERR_FLAG}
+				touch ${SYS_THUNDER_ETC_OK}
+			fi
+			
+		fi 
+	else
+		echo "misc init, ok..." >> ${wxlog}
+	fi
+	
+	mkdir -p ${SYS_THUNDER_ETC}
+	mount -o bind ${MISC_THUNDER_ETC} ${SYS_THUNDER_ETC}
+}
+
+case "$1" in
+  start)
+		rm -rf ${wxlog}
+		mkdir -p ${OTC_INFO_DIR}
+		misc_mount_and_init
+		wx_xyipk_preinstall
+		wx_base_mnt
+		wx_app_mnt
+		bootstrap_env_check
+        ;;
+  stop)
+        echo ""
+        ;;
+  restart|reload)
+        echo ""
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?
+

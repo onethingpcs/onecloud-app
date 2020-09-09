@@ -1,0 +1,5 @@
+#!/bin/sh
+
+sh /onecloud-pluginipk/miner.plugin-boxweb.ipk/stop.sh
+
+exit 0

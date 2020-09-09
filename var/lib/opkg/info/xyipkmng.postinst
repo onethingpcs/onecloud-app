@@ -1,0 +1,7 @@
+#!/bin/sh
+[ ! -d /tmp/xyipk_tmp ]&& mkdir /tmp/xyipk_tmp || rm -rf /tmp/xyipk_tmp/*
+[ ! -L /thunder/bin/plugin_proxy ] && ln -s /app/miner.xyipkmng.ipk/bin/plugin_proxy /thunder/bin/plugin_proxy
+sh /app/miner.xyipkmng.ipk/stop.sh
+sh /app/miner.xyipkmng.ipk/start.sh &
+exit 0 
+

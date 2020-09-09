@@ -1,0 +1,9 @@
+Package: onecloud-upgrade
+Priority: optional
+Version: V2.1.1
+Architecture: s905d
+Maintainer: onecloud<onecloud@onething.net>
+Depends: 
+Source: null
+Section: extras
+Description: onething cloud software.

@@ -1,0 +1,29 @@
+#!/bin/sh
+
+HPD_STATE=/sys/class/amhdmitx/amhdmitx0/hpd_state
+DISP_CAP=/sys/class/amhdmitx/amhdmitx0/disp_cap
+DISP_MODE=/sys/class/display/mode
+
+case "$1" in
+    *)
+        hdmi=`cat $HPD_STATE`
+        if [ $hdmi -eq 1 ]; then
+            mode=`awk -f /etc/display/get_hdmi_mode.awk $DISP_CAP`
+            echo $mode > $DISP_MODE
+        fi
+        case $mode in
+            720*)
+                fbset -fb /dev/fb0 -g 1280 720 1280 1440 32
+                ;;
+            1080*)
+                fbset -fb /dev/fb0 -g 1920 1080 1920 2160 32
+                ;;
+            *)
+                echo 720p > $DISP_MODE
+                fbset -fb /dev/fb0 -g 1280 720 1280 1440 32
+                ;;
+        esac
+esac
+
+exit $?
+

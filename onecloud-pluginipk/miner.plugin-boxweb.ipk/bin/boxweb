@@ -1,0 +1,26 @@
+#!/bin/sh
+
+PLUGIN_NAME="plugin-boxweb"
+PLUGIN_DIR="/onecloud-pluginipk/miner.${PLUGIN_NAME}.ipk"
+
+# create softlink for libfcgi
+cd ${PLUGIN_DIR}/lib
+if [ -e  libfcgi.so ]; then
+    rm libfcgi.so
+fi
+if [ -e libfcgi.so.0 ]; then
+    rm libfcgi.so.0
+fi
+if [ -e libfcgi++.so ]; then
+    rm libfcgi++.so
+fi
+if [ -e libfcgi++.so.0 ]; then
+    rm libfcgi++.so.0
+fi
+ln -s libfcgi.so.0.0.0 libfcgi.so
+ln -s libfcgi.so.0.0.0 libfcgi.so.0
+ln -s libfcgi++.so.0.0.0 libfcgi++.so
+ln -s libfcgi++.so.0.0.0 libfcgi++.so.0
+cd -
+
+${PLUGIN_DIR}/etc/init.d/S91nginx restart

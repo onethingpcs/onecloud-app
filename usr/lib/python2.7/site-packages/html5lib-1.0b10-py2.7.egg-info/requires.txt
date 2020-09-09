@@ -1,0 +1,26 @@
+six
+webencodings
+setuptools>=18.5
+
+[:python_version == '2.6']
+ordereddict
+
+[all]
+genshi
+chardet>=2.2
+
+[all:platform_python_implementation == 'CPython']
+datrie
+lxml
+
+[chardet]
+chardet>=2.2
+
+[datrie:platform_python_implementation == 'CPython']
+datrie
+
+[genshi]
+genshi
+
+[lxml:platform_python_implementation == 'CPython']
+lxml

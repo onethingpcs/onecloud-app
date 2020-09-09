@@ -1,0 +1,71 @@
+#!/bin/sh
+
+add_host()
+{
+	local HOSTNAME=$1
+	if [ "`grep ${HOSTNAME} /etc/hosts`" != "" ]; then
+		local h1=`head -n 1 /etc/hosts | grep "127.0.0.1 ${HOSTNAME}"`
+		if [ "$h1" == "" ]; then
+			sed -i "/${HOSTNAME}/d" /etc/hosts
+			sed -i "1 i\127.0.0.1 ${HOSTNAME}" /etc/hosts
+		fi
+	else
+		sed -i "1 i\127.0.0.1 ${HOSTNAME}" /etc/hosts
+	fi
+}
+
+init_soft_mode()
+{
+	SOFTMODE=`fw_printenv xl_softmode |  awk -F "=" '{print $2}'`
+	if [ "$SOFTMODE" == "factory" ]; then
+		if [ -f "/thunder/bin/factory_app" ];then
+			/etc/init.d/S50telnet   start
+			/etc/hotplug/sd/sd_insert
+			/etc/hotplug/usb/udisk_insert
+			/thunder/bin/factory_app
+			exit 0
+		else
+			fw_setenv xl_softmode usermode
+			rm /thunder/bin/factory_app
+		fi
+	fi
+}
+
+init_system_env ()
+{
+	mkdir -p /tmp/nginx/logs
+	mkdir -p /tmp/nginx/socket
+	mkdir -p /tmp/plugin_tmp
+	mkdir -p /misc
+	mkdir -p /app
+	touch /tmp/.xunlei_msgqueue
+    touch /tmp/.xunlei_module_queue
+    touch /tmp/.mnt_usb_queue
+	
+	READKEY_EXE=/thunder/bin/readkey
+	if [ -x "${READKEY_EXE}" ]; then
+		READKEY_BIN=${READKEY_EXE}
+	else
+		#READKEY_BIN=${OTC_BASE_DIR}""${READKEY_EXE}
+		echo "readkey not find, error......"
+	fi
+
+    SN_TAIL=`${READKEY_BIN} sn | grep "data:" | sed 's/.*\(....\)$/\1/'`
+    ${READKEY_BIN} sn | grep "data:" | awk '{print $2}' > /tmp/miner_sn
+    chmod 777 /tmp/miner_sn
+    HOSTNAME=S905DN1_$SN_TAIL
+    echo $HOSTNAME > /etc/hostname
+    hostname -F /etc/hostname
+	add_host $HOSTNAME
+	
+    UBUSD_SERV_PID=`ps | grep ubusd | grep -v grep`
+	#echo UBUSD_SERV_PID = ${UBUSD_SERV_PID}
+    [ -z "$UBUSD_SERV_PID" ] && nice -n -10 ubusd -s /var/run/ubus.sock &
+    sleep 1
+    
+    sh /etc/rc.common /etc/init.d/odhcpd stop
+    sh /etc/rc.common /etc/init.d/odhcpd disable
+}
+
+init_soft_mode
+init_system_env

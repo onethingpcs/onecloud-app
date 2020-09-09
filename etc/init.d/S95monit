@@ -1,0 +1,40 @@
+#!/bin/sh
+
+[ -x /usr/bin/monit ] || exit 0
+[ -f /etc/monitrc ] || exit 0
+
+case "$1" in
+	start)
+		printf "Starting monit: "
+    	sys_uptime=`cat /proc/uptime |cut -f1 -d .`
+    	if [ "$sys_uptime" -gt 120 ]; then 
+			start-stop-daemon -N -10 -S -x /usr/bin/monit
+			[ $? = 0 ] && echo "start monit OK" || echo "start monit FAIL"
+			#/usr/bin/monit_report_loadavg &		
+    	else 
+			(
+				echo "monit sleep 60s, until loopback device is stable."
+				sleep 60
+				start-stop-daemon -N -10 -S -x /usr/bin/monit
+				[ $? = 0 ] && echo "start monit OK" || echo "start monit FAIL"
+				#/usr/bin/monit_report_loadavg
+			)&
+		fi
+
+		;;
+	stop)
+		printf "Stopping monit: "
+		start-stop-daemon -K -q -x /usr/bin/monit
+		[ $? = 0 ] && echo "OK" || echo "FAIL"
+		;;
+	restart|reload)
+		$0 stop
+		sleep 1
+		$0 start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac
+
+exit 0

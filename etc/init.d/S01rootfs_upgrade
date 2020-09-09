@@ -1,0 +1,202 @@
+#!/bin/sh
+
+WX_BASE_PART_DIR=/instaboot
+WX_ROOTFS_UPGRADE_DIR=${WX_BASE_PART_DIR}/rootfs_upgrade
+WX_ROOTFS_UPGRADE_MD5LIST=${WX_ROOTFS_UPGRADE_DIR}/rootfs_upgrade_md5sum.list
+
+WX_OTC_CONF_DIR=/tmp/.otc_info
+WX_ROOTFS_UPGRADE_CONF=${WX_OTC_CONF_DIR}/rootfs_upgrade.txt
+
+mv_to_rootfs()
+{
+    local src_dir=${1}
+    local dst_dir=${2}
+    if [ ! -d "${src_dir}" -o ! -d "${dst_dir}" ]; then
+        echo "params error is ${src_dir} and ${dst_dir}"
+        return 1;
+    fi
+	
+	if [ "${dst_dir}" = "/" ];then
+		dst_dir=
+	fi
+	
+    if [ "${src_dir}" = "/" ];then
+        echo "params error is ${src_dir}"
+        return 1;
+    fi
+
+	for find_dir in $(find "${src_dir}" -type d)
+	do
+		update_dir=${find_dir#${src_dir}}
+		real_dir=${dst_dir}${update_dir}
+		if [ ! -z ${real_dir} ]; then
+			mkdir -p ${real_dir}
+			#echo "dir ${find_dir}, to mkdir ${real_dir} result = $?"
+		fi
+		
+	done
+
+	for find_file in $(find "${src_dir}" -type l -o -type f)
+	do
+		update_file=${find_file#${src_dir}}
+		real_file=${dst_dir}${update_file}
+		mv ${find_file} ${real_file} -f
+		#echo "file ${find_file}, cp to ${real_file}"   
+	done
+	
+    return 0;
+}
+
+check_md5_and_mv()
+{
+	local check_dir=${1}
+    local  md5_file=${2}
+    if [ ! -f "${md5_file}" ]; then
+        echo "no md5 list file, don't mv file..."
+        return 0
+    fi
+
+	local line=""
+    while read line
+    do
+        #echo "rootfs_upgrade md5_line $line"
+		local backfile=`echo $line | awk '{ print $1 }'`
+		local backfile_md5=`echo $line | awk '{ print $2 }'`
+		local realfile=${check_dir}${backfile}
+		local realfile_md5=""
+		
+		if [ -f "${realfile}" ]; then
+			realfile_md5=`md5sum "${realfile}" | awk '{ print $1 }'`
+			if [ "${backfile_md5}" != "${realfile_md5}" ]; then
+				echo "rootfs ${realfile} md5 not match, ${backfile_md5}, ${realfile_md5}"
+			else
+				mv ${realfile} ${backfile} -f
+			fi
+		else
+			echo "rootfs ${realfile} not find..."
+		fi
+		
+       
+    done < ${md5_file}
+
+	return 0
+}
+
+mv_to_rootfs_checkmd5()
+{
+    local src_dir=${1}
+    local dst_dir=${2}
+	local check_md5file=${3}
+    if [ ! -d "${src_dir}" -o ! -d "${dst_dir}" ]; then
+        echo "params error is ${src_dir} and ${dst_dir}"
+        return 1;
+    fi
+	
+	if [ "${dst_dir}" = "/" ];then
+		dst_dir=
+	fi
+	
+    if [ "${src_dir}" = "/" ];then
+        echo "params error is ${src_dir}"
+        return 1;
+    fi
+
+	for find_dir in $(find "${src_dir}" -type d)
+	do
+		update_dir=${find_dir#${src_dir}}
+		real_dir=${dst_dir}${update_dir}
+		if [ ! -z ${real_dir} ]; then
+			mkdir -p ${real_dir}
+			#echo "dir ${find_dir}, to mkdir ${real_dir} result = $?"
+		fi
+		
+	done
+	
+	check_md5_and_mv ${src_dir} ${check_md5file}
+	
+    return 0;
+}
+
+check_and_upgrade_rootfs()
+{
+	mkdir -p /low /high
+	mkdir -p ${WX_ROOTFS_UPGRADE_DIR}
+    mkdir -p ${WX_OTC_CONF_DIR}
+    echo "${WX_ROOTFS_UPGRADE_DIR}" > ${WX_ROOTFS_UPGRADE_CONF}
+
+    wx_rootfs_flag=`fw_printenv xl_rootfs_upgrade 2>&1 | grep "xl_rootfs_upgrade=" | awk -F"=" '{print $2}'`
+    if [ "${wx_rootfs_flag}" != "clear" ]; then
+        echo "normal rootfs start"
+        return 0;
+    else
+        echo "upgrade rootfs start"
+    fi
+
+    mkdir -p ${WX_BASE_PART_DIR}
+    local result=`mount | grep "on ${WX_BASE_PART_DIR}"`
+    if [ -z "${result}" ]; then 
+        echo "S01 mount ${WX_BASE_PART_DIR} first"
+        mount -t ext4 /dev/instaboot ${WX_BASE_PART_DIR}
+    else
+        echo "S01 mount ${WX_BASE_PART_DIR} already"
+    fi
+
+    if [ -d  "${WX_ROOTFS_UPGRADE_DIR}" ]; then
+        echo "mv it for upgrade rootfs..."
+        #mv ${WX_ROOTFS_UPGRADE_DIR}/* /
+		mv_to_rootfs_checkmd5 ${WX_ROOTFS_UPGRADE_DIR} "/" ${WX_ROOTFS_UPGRADE_MD5LIST}
+    fi
+	
+	sync
+
+    /usr/sbin/fw_setenv xl_rootfs_upgrade "false"
+}
+
+check_and_backup_key_configfile()
+{
+	local postfix="_bak"
+	local result="1"
+	local fn_size="0"
+
+	local user_conf="/etc/passwd /etc/shadow /etc/group"
+	#result=`adduser -D root -u 0 -G root > /dev/null 2>&1; echo $?`
+	for check_file in $user_conf
+	do
+		if [ -f "${check_file}" -a ${result} -eq 1 ]; then
+			fn_size=`ls ${check_file} -l | awk '{print $5}'`
+			if [ ${fn_size} -gt 32 ]; then
+				echo "${check_file} fn_size ok = ${fn_size}, result = ${result}"
+				cp ${check_file} ${check_file}${postfix} -f
+				continue;
+			fi
+		fi
+		
+		echo "${check_file} fn_size error = ${fn_size}, result = ${result}"
+		if [ -f "${check_file}${postfix}" ]; then
+			cp ${check_file}${postfix} ${check_file} -f
+		fi
+	done
+	
+	local profile_conf="/etc/profile"
+	for check_file in $profile_conf
+	do
+		if [ -f "${check_file}" ]; then
+			fn_size=`ls ${check_file} -l | awk '{print $5}'`
+			if [ ${fn_size} -gt 1024 -a ${fn_size} -lt 4096 ]; then
+				echo "${check_file} fn_size ok = ${fn_size}, result = ${result}"
+				cp ${check_file} ${check_file}${postfix} -f
+				continue;
+			fi
+		fi
+		
+		echo "${check_file} fn_size error = ${fn_size}, result = ${result}"
+		if [ -f "${check_file}${postfix}" ]; then
+			cp ${check_file}${postfix} ${check_file} -f
+		fi
+	done
+	
+	sync
+}
+
+check_and_upgrade_rootfs
+check_and_backup_key_configfile

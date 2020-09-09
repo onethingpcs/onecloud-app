@@ -1,0 +1,58 @@
+#! /bin/sh
+#
+#   opkg config checker and upgrade script
+#
+#   Copyright (C) 2014 Paul Barker
+#
+#   This program is free software; you can redistribute it and/or modify it
+#   under the terms of the GNU General Public License as published by the
+#   Free Software Foundation; either version 2, or (at your option) any
+#   later version.
+#
+#   This program is distributed in the hope that it will be useful, but
+#   WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#   General Public License for more details.
+
+set -e
+
+if [ "$#" -eq 2 ]; then
+    file_in=$1
+    file_out=$2
+    inplace=0
+elif [ "$#" -eq 1 ]; then
+    file_in=$1
+    file_out=`mktemp`
+    inplace=1
+else
+    cat 1>&2 << EOF
+Usage: $0 <file_in> <file_out>
+
+The script reads an opkg config file specified by <file_in> and performs
+sanity checks. It may automatically fix some errors, especially those where the
+config syntax or option names have changed during an opkg upgrade. The fixed
+file will be written to <file_out> if this argument is given, otherwise
+<file_in> will be fixed in place. Warning and error messages will be printed to
+stderr.
+EOF
+    exit 1
+fi
+
+# v0.2.x to v0.3.0 upgrade: lists_dir syntax has changed
+#
+# The old lists_dir statement had the syntax 'lists_dir ext path' where 'ext'
+# was ignored. The new syntax is 'option lists_dir path'.
+awk_lists_dir='$1 == "lists_dir" { print "option lists_dir " $3 ; \
+    print "Fixed: " $0 " -> option lists_dir " $3 > "/dev/stderr" ; \
+    next }'
+
+# Combine scripts and add terminating '1' statement which will print all
+# unmatched lines (assuming each match finishes with 'next').
+awk_script="$awk_lists_dir 1"
+
+# Run awk_script
+awk "$awk_script" < $file_in > $file_out
+
+if [ "$inplace" -eq 1 ]; then
+    mv $file_out $file_in
+fi

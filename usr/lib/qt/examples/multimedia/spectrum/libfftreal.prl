@@ -1,0 +1,6 @@
+QMAKE_PRL_BUILD_DIR = /data/jenkins2/workspace/OneCloudFirmware1_AP_192.168.126.224/output/mesongxl_p230_5.0/build/qt5multimedia-5.6.2/examples/multimedia/spectrum/3rdparty/fftreal
+QMAKE_PRO_INPUT = fftreal.pro
+QMAKE_PRL_TARGET = libfftreal.so.1.0.0
+QMAKE_PRL_CONFIG = lex yacc depend_includepath testcase_targets import_plugins import_qpa_plugin qt_build_extra file_copies qt warn_on release link_prl incremental nostrip cross_compile shared qpa no_mocdepend release qt_no_framework linux unix posix gcc cross_compile compile_examples no-libdl system-sqlite qpa largefile enable_new_dtags neon prefix_build force_independent force_bootstrap create_prl link_prl prepare_docs qt_docs_targets no_private_qt_headers_warning QTDIR_build qt_example_installs exceptions_off testcase_exceptions explicitlib done_config_openal config_alsa done_config_alsa config_gstreamer done_config_gstreamer done_config_gstreamer_photography config_gstreamer_encodingprofiles done_config_gstreamer_encodingprofiles config_gstreamer_appsrc done_config_gstreamer_appsrc config_linux_v4l done_config_linux_v4l done_config_resourcepolicy done_config_gpu_vivante c++11 install_ok have_target dll relative_qt_rpath thread moc resources
+QMAKE_PRL_VERSION = 1.0.0
+QMAKE_PRL_LIBS = -lQt5Gui -lQt5Core -lrt -ldl -lpthread

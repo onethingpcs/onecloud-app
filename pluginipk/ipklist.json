@@ -1,0 +1,58 @@
+{
+	"list":[
+		{
+			"package":"plugin-autossh", "uri":"/pluginipk/plugin-autossh_1.3.0_s905d.ipk"
+		},
+		{
+			"package":"plugin-agent", "uri":"/pluginipk/plugin-agent_5.4.3_s905d.ipk"
+		},
+		{
+			"package":"plugin-catalyst", "uri":"/pluginipk/plugin-catalyst_0.7.1_s905d.ipk"
+		},
+		{
+			"package":"plugin-collectd", "uri":"/pluginipk/plugin-collectd_1.0.12_s905d.ipk"
+		},
+		{
+			"package":"plugin-crashreporter", "uri":"/pluginipk/plugin-crashreporter_1.0.10_s905d.ipk"
+		},
+		{
+			"package":"plugin-datacollect", "uri":"/pluginipk/plugin-datacollect_1.0.48_s905d.ipk"
+		},
+		{
+			"package":"plugin-deps", "uri":"/pluginipk/plugin-deps_1.3.14_s905d.ipk"
+		},
+		{
+			"package":"plugin-dnscrypt-proxy", "uri":"/pluginipk/plugin-dnscrypt-proxy_1.0.4_s905d.ipk"
+		},
+		{
+			"package":"plugin-dockerd", "uri":"/pluginipk/plugin-dockerd_V2.3.1_s905d.ipk"
+		},
+		{
+			"package":"plugin-govipblacklist", "uri":"/pluginipk/plugin-govipblacklist_1.0.1_s905d.ipk"
+		},
+		{
+			"package":"plugin-mcagent", "uri":"/pluginipk/plugin-mcagent_1.1.1_s905d.ipk"
+		},
+		{
+			"package":"plugin-minion", "uri":"/pluginipk/plugin-minion_1.3.37_s905d.ipk"
+		},
+		{
+			"package":"plugin-p2p-deploy", "uri":"/pluginipk/plugin-p2p-deploy_1.5.63_s905d.ipk"
+		},
+		{
+			"package":"plugin-relay", "uri":"/pluginipk/plugin-relay_1.1.1_s905d.ipk"
+		},
+		{
+			"package":"plugin-tesla", "uri":"/pluginipk/plugin-tesla_1.1.2_s905d.ipk"
+		},
+		{
+			"package":"plugin-traffic", "uri":"/pluginipk/plugin-traffic_1.4.3_s905d.ipk"
+		},
+		{
+			"package":"plugin-tunnel", "uri":"/pluginipk/plugin-tunnel_1.1.3_s905d.ipk"
+		},
+		{
+			"package":"plugin-boxweb", "uri":"/pluginipk/plugin-boxweb_1.0.3_s905d.ipk"
+		}
+	]
+}

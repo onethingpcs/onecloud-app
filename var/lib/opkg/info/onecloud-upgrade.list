@@ -1,0 +1,9 @@
+/usr/share/onecloud-upgrade/opkg.conf
+/usr/share/onecloud-upgrade/upgrade_log_debug.conf
+/usr/share/onecloud-upgrade/upgrade_log.conf
+/usr/share/onecloud-upgrade/md5sum.list
+/usr/share/onecloud-upgrade/.opkg_default.conf
+/usr/share/onecloud-upgrade/.img_date
+/usr/sbin/onecloud_upgrade_restart.sh
+/usr/sbin/onecloud_upgrade_run.sh
+/usr/sbin/upgrade

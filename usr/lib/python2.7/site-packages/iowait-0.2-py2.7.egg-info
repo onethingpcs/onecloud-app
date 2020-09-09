@@ -1,0 +1,83 @@
+Metadata-Version: 1.1
+Name: iowait
+Version: 0.2
+Summary: Platform-independent module for I/O completion events
+Home-page: https://launchpad.net/python-iowait
+Author: Andrea Corbellini
+Author-email: corbellini.andrea@gmail.com
+License: GNU LGPL v3
+Description: iowait -- Platform-independent module for I/O completion events
+        ===============================================================
+        
+        Different operating systems provide different ways to wait for I/O completion
+        events: there's ``select()``, ``poll()``, ``epoll()`` and ``kqueue()``. For
+        cross-platform applications it can be a pain to support all this system
+        functions, especially because each one provides a different interface.
+        
+        IOWait solves this problem by providing a unified interface and using always
+        the best and faster function available in the platform. Its only limitation is
+        that, on Windows, it only works for sockets.
+        
+        This library is compatible both with Python 2 and 3.
+        
+        
+        Example
+        -------
+        
+        Here is an usage example. First, we need to create a pair of sockets:
+        
+            >>> import socket
+            >>> a, b = socket.socketpair()
+        
+        Then we create a ``IOWait`` object. This object is essentially a wrapper around
+        a system function (such as ``select()`` or ``poll()``), but exposes always the
+        same methods and behaves always the same.
+        
+            >>> from iowait import IOWait
+            >>> waitobj = IOWait()
+        
+        Now we can watch the first socket for read events in this way:
+        
+            >>> waitobj.watch(a, read=True)
+        
+        We send some data over the other socket:
+        
+            >>> b.sendall('this is a test')
+        
+        Calling ``wait()`` on the ``IOWait`` object will tell us that the socket a is
+        ready to be read:
+        
+            >>> events = waitobj.wait()
+            >>> events #doctest:+ELLIPSIS
+            [IOEvent(fileobj=<socket object, ...>, read=True, write=False)]
+        
+        The return value of ``wait()`` is a list of three-tuples in the format:
+        ``(file, read, write)``, where ``file`` is a file-like object, ``read`` and
+        ``write`` tell respectively whether the file is ready to be read or written.
+        
+        Once all the data has been read, the next call to ``wait()`` will block
+        forever, unless a timeout is specified. The timeout can be zero:
+        
+            >>> a.recv(14)
+            'this is a test'
+            >>> waitobj.wait(0)
+            []
+        
+        
+        Documentation
+        -------------
+        
+        The documentation is stored in the module's doc string. To read it, use the
+        Python interactive interpreter:
+        
+            >>> import iowait
+            >>> help(iowait) #doctest:+SKIP
+        
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Software Development :: Libraries :: Python Modules

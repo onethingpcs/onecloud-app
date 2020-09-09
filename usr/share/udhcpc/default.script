@@ -1,0 +1,119 @@
+#!/bin/sh
+
+# udhcpc script edited by Tim Riker <Tim@Rikers.org>
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+#RESOLV_CONF="/etc/resolv.conf"
+RESOLV_DNSMASQ_CONF="/tmp/resolv.dnsmasq.conf"
+
+log_devfile="/dev/null"
+lock_resolvconf="/tmp/resolvconf.lock"
+IPV4_FLAG="#ipv4"
+
+#[ -e $RESOLV_CONF ] || touch $RESOLV_CONF
+[ -e $RESOLV_DNSMASQ_CONF ] || touch $RESOLV_DNSMASQ_CONF
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+case "$1" in
+	deconfig)
+		/sbin/ifconfig $interface up
+		/sbin/ifconfig $interface 0.0.0.0
+
+		# drop info from this interface
+		# resolv.conf may be a symlink to /tmp/, so take care
+		TMPFILE=$(mktemp)
+		
+		#modify by jia, echo -n ... so here is invalid
+		#grep -vE "# $interface\$" $RESOLV_DNSMASQ_CONF > $TMPFILE
+		#cat $TMPFILE > $RESOLV_DNSMASQ_CONF
+		rm -f $TMPFILE
+
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -k $interface
+		fi
+		;;
+
+	leasefail|nak)
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -wD $interface --no-chroot
+		fi
+		;;
+
+	renew|bound)
+		if [ -x /usr/sbin/avahi-autoipd ]; then
+			/usr/sbin/avahi-autoipd -k $interface
+		fi
+		/sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+
+		if [ -n "$router" ] ; then
+			echo "deleting routers"
+			while route del default gw 0.0.0.0 dev $interface 2> /dev/null; do
+				:
+			done
+
+			for i in $router ; do
+				route add default gw $i dev $interface
+			done
+		fi
+
+		# drop info from this interface
+		# resolv.conf may be a symlink to /tmp/, so take care
+		TMPFILE=$(mktemp)
+		grep -vE "# $interface\$" $RESOLV_DNSMASQ_CONF > $TMPFILE
+		
+		#modify by jia, echo -n ... so here is invalid
+		#cat $TMPFILE > $RESOLV_DNSMASQ_CONF
+		rm -f $TMPFILE
+
+		# prefer rfc3359 domain search list (option 119) if available
+		if [ -n "$search" ]; then
+			search_list=$search
+		elif [ -n "$domain" ]; then
+			search_list=$domain
+		fi
+
+		#modify by jia... echo -n ... so here is invalid
+		#[ -n "$search_list" ] &&
+		#	echo "search $search_list # $interface" >> $RESOLV_DNSMASQ_CONF
+		
+		#echo -n "" > $RESOLV_DNSMASQ_CONF
+		
+		touch ${lock_resolvconf}
+		if [ -f "${lock_resolvconf}" ]; then
+			{
+				echo "lock start" >> "${log_devfile}"
+				flock 3
+				touch $RESOLV_DNSMASQ_CONF
+				sed -i "/ipv4/d" $RESOLV_DNSMASQ_CONF
+				for i in $dns ; do
+					echo adding dns $i
+					echo "nameserver $i # $interface ${IPV4_FLAG}" >> $RESOLV_DNSMASQ_CONF
+				done
+				echo "nameserver 114.114.114.114 # ${IPV4_FLAG}" >> $RESOLV_DNSMASQ_CONF
+				echo "lock over" >> "${log_devfile}"
+			} 3<> ${lock_resolvconf}
+		else
+			touch $RESOLV_DNSMASQ_CONF
+			sed -i "/ipv4/d" $RESOLV_DNSMASQ_CONF
+			for i in $dns ; do
+				echo adding dns $i
+				echo "nameserver $i # $interface ${IPV4_FLAG}" >> $RESOLV_DNSMASQ_CONF
+			done
+			echo "nameserver 114.114.114.114 # ${IPV4_FLAG}" >> $RESOLV_DNSMASQ_CONF
+		fi
+
+		#echo 'nameserver 127.0.0.1' > $RESOLV_CONF
+		#echo 'nameserver 114.114.114.114' >> $RESOLV_CONF
+		#echo 'nameserver 223.5.5.5' >> $RESOLV_CONF
+		;;
+esac
+
+HOOK_DIR="$0.d"
+for hook in "${HOOK_DIR}/"*; do
+    [ -f "${hook}" -a -x "${hook}" ] || continue
+    "${hook}" "${@}"
+done
+
+exit 0

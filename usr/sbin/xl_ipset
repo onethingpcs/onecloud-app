@@ -1,0 +1,58 @@
+#!/bin/sh
+HOSTNAME=`cat /etc/hostname`
+if [ ! -n "$HOSTNAME" ];then
+    HOSTNAME="OneCloud"
+fi
+
+config_static_ip ()
+{
+    killall udhcpc
+    echo "auto lo " > /etc/network/interfaces
+    echo "iface lo inet loopback" >> /etc/network/interfaces
+    echo "auto eth0" >> /etc/network/interfaces
+    echo "iface eth0 inet static " >> /etc/network/interfaces
+    echo "address $1" >> /etc/network/interfaces
+    echo "netmask $2" >> /etc/network/interfaces
+    echo "broadcast $3" >> /etc/network/interfaces
+    echo "gateway $4" >> /etc/network/interfaces
+    echo "hostname $HOSTNAME" >> /etc/network/interfaces
+    route add default gw $4
+}
+
+config_dhcp ()
+{
+    killall udhcpc
+    echo "auto lo " > /etc/network/interfaces
+    echo "iface lo inet loopback" >> /etc/network/interfaces
+    echo "auto eth0" >> /etc/network/interfaces
+    echo "iface eth0 inet dhcp " >> /etc/network/interfaces
+    echo "hostname $HOSTNAME " >> /etc/network/interfaces
+}
+
+restart_network ()
+{
+    /sbin/ifdown -af
+    /sbin/ifup -af
+}
+
+if [ $# == 1 ]; then
+    if [ "$1" == "dhcp" ];then
+        if [ -f /var/run/udhcpc.eth0.pid ];then
+            restart_network
+        else
+            config_dhcp
+            restart_network
+        fi
+        exit 0
+    fi
+fi
+
+if [ $# != 4 ]; then
+echo "xl_ipset <ip> <netmask> <broadcast> <gateway>"
+echo "e.g. :  xl_ipset 192.168.10.122 255.255.255.0 192.168.10.255 192.168.10.1"
+fi
+
+if [ $# == 4 ]; then
+    config_static_ip $1 $2 $3 $4
+    restart_network
+fi

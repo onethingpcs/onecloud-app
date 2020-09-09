@@ -1,0 +1,10 @@
+Package: plugin-boxweb
+Priority: optional
+Version: 1.0.3
+Architecture: s905d
+Maintainer: ipktools@xunlei.com
+Depends:
+Repository: mcloud_s905_ipk
+Source: null
+Section: extras
+Description: Xunlei miner software.

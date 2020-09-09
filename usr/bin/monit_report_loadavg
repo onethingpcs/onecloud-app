@@ -1,0 +1,43 @@
+#!/bin/sh
+echo `date +%F_%T` "/usr/bin/monit_report_loadavg" >> /tmp/.monit.log
+sleep 240  # waiting for disk be mounted
+
+[ -f "/app/.monit/loadavg_excp_time" ] || exit 0
+echo "/app/.monit/loadavg_excp_time is exist, report it. " >> /tmp/.monit.log
+
+loadavg_excp_time=`cat /app/.monit/loadavg_excp_time`
+date=`cat /app/.monit/loadavg_excp_time | cut -f1 -d _`
+count=`ls /app/.monit | grep $date | wc -l`
+
+echo "today we report $count times." >> /tmp/.monit.log
+
+rep_load=`cat /app/.monit/load`
+rep_cpu=`cat /app/.monit/cpu`
+rep_memory=`cat /app/.monit/memory`
+rep_uptime=`cat /app/.monit/uptime`
+echo $rep_load >> /tmp/.monit.log
+echo $rep_cpu >> /tmp/.monit.log
+echo $rep_memory >> /tmp/.monit.log
+echo $rep_uptime >> /tmp/.monit.log
+
+SN=`cat /tmp/miner_sn`
+
+SYSVER=
+if [ -f /.sys_ver ]; then
+    export SYSVER=`cat /.sys_ver`
+fi
+
+et="`date +%s`"
+ubus send stat.push '{"act":"monit","et":"'$et'","v":"'$SYSVER'","sn":"'$SN'","excp":"'1'","today_counts":"'$count'","args":"'"$loadavg_excp_time"','"$rep_load"','"$rep_cpu"','"$rep_memory"','"$rep_uptime"'"}'
+
+rm -f /app/.monit/loadavg_excp_time
+rm -f /app/.monit/load
+rm -f /app/.monit/cpu
+rm -f /app/.monit/memory
+rm -f /app/.monit/uptime
+# only keep today's log in the flash 
+for oldlog in `ls /app/.monit/ | grep -v $date`; do
+    rm -f /app/.monit/$oldlog
+    echo "rm old log: $oldlog" >> /tmp/.monit.log
+done
+echo "report DONE" >> /tmp/.monit.log

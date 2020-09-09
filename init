@@ -1,0 +1,456 @@
+#!/bin/sh
+#Mount things needed by this script
+/bin/mount -t sysfs sysfs /sys
+/bin/mount -t devtmpfs devtmpfs /dev
+/bin/mount -t proc proc /proc
+
+#Create device nodes
+mdev -s
+
+#insert our precious NFTL
+modprobe aml_nftl_dev
+
+#Function for parsing command line options with "=" in them
+# get_opt("init=/sbin/init") will return "/sbin/init"
+get_opt() {
+    echo "$@" | cut -d "=" -f 2
+}
+
+#Defaults
+init="/sbin/init"
+root="/dev/system"
+rootfstype="ext4"
+
+init_root_by_env()
+{
+	#image_flag=`fw_printenv second_image_load 2>/dev/null | awk -F'=' '{print $2}'`
+	rootfs_flag=`fw_printenv second_rootfs_load 2>/dev/null | awk -F'=' '{print $2}'`
+	echo "debug by linzejia rootfs_flag = ${rootfs_flag}"
+	if [ "${rootfs_flag}" = "on" ]; then
+		root=/dev/backup
+	else
+		root=/dev/system
+	fi
+}
+
+#Mount the root device
+#Waiting for device to become ready
+i=1
+while [ "$i" -le 15 ]
+do
+    if [ -b "${root}" ]; then
+        echo "${root} is ready now."
+        break
+    fi
+    echo "${root} is not ready.  Waited for ${i} second"
+    sleep 1
+    i=$((i+1))
+done
+
+check_key_file()
+{
+	local rm_res=""
+	local check_dir=$1
+	local fn_size=0
+	local check_zero_file="/etc/inittab /etc/passwd /etc/shadow /etc/cgroup /etc/profile"
+	local check_rm_file="/usr /usr/bin /bin /usr/sbin /sbin /usr/lib /lib /etc /etc/init.d /etc/inittab /etc/passwd /etc/shadow /etc/cgroup /etc/profile"
+	local check_ro_file="/bin/busybox /sbin/init /etc/profile /etc/resolv.conf"
+	for ck_file in $check_rm_file
+	do
+		if [ -h "${check_dir}${ck_file}" ]; then
+			#rm_res=`ls -d "${check_dir}${ck_file}" -al | grep "overlay-whiteout"`
+			#if [ ! -z "${rm_res}" ]; then
+				echo "${check_dir}${ck_file} rm_xl_error ${rm_res}"
+				rm -f ${check_dir}${ck_file};
+			#fi
+		fi
+	done
+	
+	for ck_file in $check_zero_file
+	do
+		if [ -f "${check_dir}${ck_file}" ]; then
+			fn_size=`ls -d ${check_dir}${ck_file} -al | awk '{print $5}'`
+			if [ ${fn_size} -le 0 ]; then
+				echo "${check_dir}${ck_file} size_xl_error ${fn_size}"
+				rm -f ${check_dir}${ck_file};
+			fi
+		fi
+	done
+	
+	for ck_file in $check_ro_file
+	do
+		if [ -h "${check_dir}${ck_file}" -o -f "${check_dir}${ck_file}" ]; then
+			echo "${check_dir}${ck_file} ro_xl_error ${rm_res}"
+			rm -f ${check_dir}${ck_file};
+		fi
+	done
+}
+
+mount_rootfs()
+{
+	if [ "${rootfstype}" != "" ]; then
+		export LD_LIBRARY_PATH=/usr/lib
+		misc_dev="/dev/misc"
+		misc_type=`blkid -s TYPE ${misc_dev} | awk -F"\"" '{print $2}'`
+		if [ "${misc_type}" != "ext4" ]; then 
+			echo "first   format it ${misc_dev} ext4"
+			mkfs.ext4 -F ${misc_dev}
+		else
+			echo "already format it ${misc_type}"
+		fi
+		
+		rwfs_dev="/dev/instaboot"
+		instaboot_type=`blkid -s TYPE ${rwfs_dev} | awk -F"\"" '{print $2}'`
+		if [ "${instaboot_type}" == "" ]; then 
+			echo "first   format it ${instaboot_type}"
+			mkfs.ext4 -F ${rwfs_dev}
+		else
+			echo "already format it ${instaboot_type}"
+		fi
+		
+		echo "fsck check ${rwfs_dev} now."
+		e2fsck -fy "${rwfs_dev}"
+		
+		echo "fsck check ${root} now."
+		e2fsck -fy "${root}"
+			
+		fs_low_wx=/low
+		fs_high_wx=/high
+		wx_systemfs=${fs_high_wx}/otc_system
+		wx_work_dir=${fs_high_wx}/otc_workdir
+		mkdir -p ${fs_high_wx} ${fs_low_wx} /mnt
+		echo "mount ${rwfs_dev} now."
+		mount -t ext4 ${rwfs_dev} ${fs_high_wx}
+		result=`mount | grep ${rwfs_dev}`
+		if [ "${result}" != "" ]; then
+			echo "mount overlay ${root} ${rwfs_dev} start"
+			mount -t ${rootfstype} -o ro "${root}" ${fs_low_wx}
+			if [ ! -d "${wx_systemfs}" ]; then
+				rm -f ${wx_systemfs};
+				mkdir -p ${wx_systemfs}
+			fi
+			
+			if [ ! -d "${wx_work_dir}" ]; then
+				rm -f ${wx_work_dir}
+				mkdir -p ${wx_work_dir}
+			fi
+			#mount -t aufs -o br=${fs_high_wx}=rw:${fs_low_wx}=ro none /mnt  # Aufs is not used because docker has an action to umount all aufs fs, is so amzing...
+			#mount -t overlayfs overlay -o lowerdir=${fs_low_wx},upperdir=${fs_high_wx} /mnt
+			
+			wx_rootfs_flag=`fw_printenv xl_rootfs_upgrade 2>&1 | grep "xl_rootfs_upgrade=" | awk -F"=" '{print $2}'`
+			if [ "${wx_rootfs_flag}" = "true" ]; then
+				echo "clear otc_system......"
+				ln -sf /usr/sbin/fw_printenv /usr/sbin/fw_setenv
+				rm -rf ${wx_systemfs}
+				mkdir -p ${wx_systemfs}
+				rm -rf ${wx_work_dir}
+				mkdir -p ${wx_work_dir}
+				/usr/sbin/fw_setenv xl_rootfs_upgrade "clear"
+			fi
+			
+			check_key_file ${wx_systemfs}
+			#we will rm all wx_systemfs when rootfs upgrade or entry recover_factory, so don't mount at fs_high_wx
+			#mount -t overlayfs overlay -o lowerdir=${fs_low_wx},upperdir=${wx_systemfs} /mnt
+			mount -t overlay overlay -o lowerdir=${fs_low_wx},workdir=${wx_work_dir},upperdir=${wx_systemfs} /mnt
+			echo "mount overlay ${root} ${rwfs_dev} complete $?"
+		else
+			echo "mount overlay ${root} ${rwfs_dev} failed..."
+			echo "mount type ${rootfstype} ${root} now."
+			mount -t ${rootfstype} "${root}" /mnt
+			echo "mount ${rootfstype} ${root} complete."
+		fi
+	else
+		echo "mount ${root} now."
+		mount "${root}" /mnt
+	fi
+}
+
+get_boot() {
+    echo `awk '
+    BEGIN{
+       mtd = -1
+    }
+    /"boot"/ {mtd = $1; len = length(mtd); mtd=substr(mtd, 4, len - 4); 
+    } 
+    END{
+        if (mtd != -1) print "/dev/mtdblock"mtd
+    }' /proc/mtd`
+}
+
+if [ -x "/usr/sbin/fw_printenv" ]; then
+	ln -sf /usr/sbin/fw_printenv /usr/sbin/fw_repairenv
+	result=`/usr/sbin/fw_repairenv | grep "env repair result" | awk -F" " '{print $4}'`
+	if [ "$result" = "success" ]; then
+		echo "kernel env repair success..."
+		reboot -f
+	else
+		echo "kernel env no repair $result..."
+	fi
+fi
+
+mediafs_create() {
+	export LD_LIBRARY_PATH=/usr/lib
+	rootfs_currunt=${1}
+    mediafs_img=${rootfs_currunt}root/media_ext4.img
+	mediafs_dev=${rootfs_currunt}${2}
+
+	if [ ! -f "${mediafs_img}" ]; then
+		echo "first dd ${mediafs_img}"
+		dd if=/dev/zero of=${mediafs_img} bs=4K count=1024
+	fi
+	
+	losetup ${mediafs_dev} ${mediafs_img}
+	mediafs_type=`blkid -s TYPE ${mediafs_dev} | awk -F"\"" '{print $2}'`
+	if [ "${mediafs_type}" == "" ]; then 
+		echo "first   format mediafs ${mediafs_dev} ${mediafs_type}"
+		mkfs.ext4 -F ${mediafs_dev}
+	else
+		echo "already format mediafs ${mediafs_dev} it"
+	fi
+	
+	e2fsck -fy "${mediafs_dev}"
+	echo "mediafs_create ${mediafs_dev} over $?"
+}
+
+mediafs_mount() {
+	export LD_LIBRARY_PATH=/usr/lib
+	rootfs_currunt=$1
+	mediafs_dev=${rootfs_currunt}${2}
+	mediafs_dir=${rootfs_currunt}media
+	
+	mkdir -p ${mediafs_dir}
+	mount -t ext4 ${mediafs_dev} ${mediafs_dir}
+	echo "mediafs_mount ${mediafs_dir} over $?"
+}
+
+check_usb_burn()
+{
+	echo "entry check_usb_burn..."
+	j=1
+	while [ "$j" -le 5 ]
+	do
+		find_usb=`ls /dev/sd* 2>/dev/null`
+		if [ "${find_usb}" != "" ]; then
+			echo "find usb device time = $j"
+			sleep 1;
+			break;
+		fi
+		sleep 1
+		j=$((j+1))
+	done
+	
+	usb_dev=`ls /dev/sd[a-z][0-9] 2>/dev/null | awk NR==1`
+	if [ "${usb_dev}" = "" ]; then
+		usb_dev=`ls /dev/sd[a-z] 2>/dev/null | awk NR==1`
+	fi
+	
+	if [ ! -f "/usr/sbin/fw_setenv" ]; then
+		ln -sf /usr/sbin/fw_printenv /usr/sbin/fw_setenv
+	fi
+	
+	if [ "${usb_dev}" != "" ]; then 
+		mount_usb_dev=${usb_dev}
+		mount_img_dev=/dev/logo
+		mount_usb_dir=/tmp/usb_burn
+		mount_img_dir=/tmp/img_burn
+		burn_flag="burn_true_flag.txt"
+		burn_flag_path=${mount_usb_dir}/${burn_flag}
+		burn_img_complete="true"
+		
+		burn_loop_flag="burn_loop_flag.txt"
+		burn_loop_flag_path=${mount_usb_dir}/${burn_loop_flag}
+		
+		reset_flag="reset_flag"
+		reset_flag_flag_path=${mount_usb_dir}/${reset_flag}
+		
+		cp_uboot_file="bootloader.img"
+		cp_img_file="Image rootfs.cpio.uboot uEnv.ini gxl_p230_2g.dtb aml_autoscript emmc_autoscript_4 emmc_autoscript_5 s905_autoscript"
+		cp_rootfs_file="rootfs.ext4"
+		cp_rootfs_path=${mount_usb_dir}/${cp_rootfs_file}
+		cp_rootfs_file_encrypt="rootfs.bin"
+		cp_rootfs_file_encrypt_path=${mount_usb_dir}/${cp_rootfs_file_encrypt}
+		mkdir -p ${mount_usb_dir}
+		mkdir -p ${mount_img_dir}
+		
+		echo "find burn fw by usb......"
+		mount ${mount_usb_dev} ${mount_usb_dir}
+		
+		if [ -f "${reset_flag_flag_path}" ]; then 
+			echo "set xl_reset_flag true and reset it......"
+			/usr/sbin/fw_setenv xl_reset_flag "true"
+			mv ${reset_flag_flag_path} ${reset_flag_flag_path}_bak
+		else
+			tmp_reset_flag=`/usr/sbin/fw_printenv xl_reset_flag 2>/dev/null | awk -F'=' '{print $2}'`
+			if [ "${tmp_reset_flag}" != "false" ]; then
+				echo "set xl_reset_flag false......"
+				/usr/sbin/fw_setenv xl_reset_flag "false"
+			fi
+		fi
+		
+		if [ $? -ne 0 ]; then
+			echo "mount ${mount_usb_dev} ${mount_usb_dir} failed..."
+			return 1;
+		elif [ -f "${burn_flag_path}" ]; then
+			echo "has ${burn_flag_path} so not burn it..."
+			echo "start umount usb......"
+			umount -l ${mount_usb_dev}
+			return 0;
+		fi
+		
+		echo "start burn kernel by usb......"
+		mmcblk1_fstype=`blkid -s PTTYPE /dev/mmcblk1 | awk -F"\"" '{print $2}'`
+		echo "mmcblk1_fstype = ${mmcblk1_fstype}"
+		if [ "${mmcblk1_fstype}" == "dos" ]; then 
+			echo "Is abnormal N1 uboot, maybe is bny or xl"
+			/usr/sbin/fw_setenv reboot_mode "update"
+			/usr/sbin/fw_setenv upgrade_step "3"
+			if [ -f "${mount_usb_dir}/${cp_uboot_file}" ]; then
+				dd if="${mount_usb_dir}/${cp_uboot_file}" of=/dev/bootloader
+				sync
+				echo "uboot process over, so reboot it once"
+				reboot -f
+			else
+				echo "check the file (${cp_uboot_file}) exists"
+			fi
+		else
+			echo "Is normal N1 uboot"
+		fi
+		
+		for tmp_img in $cp_img_file
+		do 
+			if [ ! -f "${mount_usb_dir}/$tmp_img" ]; then
+				echo "sd kernel is not complete..."
+				burn_img_complete="false"
+			fi
+		done
+		
+		if [ ${burn_img_complete} = "true" ]; then
+			mkfs.vfat ${mount_img_dev}
+			if [ $? -eq 0 ]; then
+				mount ${mount_img_dev} ${mount_img_dir}
+				if [ $? -ne 0 ]; then
+					echo "mount ${mount_img_dev} ${mount_img_dir} failed..."
+				else
+					cd ${mount_usb_dir} && cp ${cp_img_file} ${mount_img_dir} -arf  && cd -
+					/usr/sbin/fw_setenv second_image_load "off"
+					echo "success burn kernel by usb...... maybe should add md5..."
+					#ls -al ${mount_img_dir}
+				fi
+			fi
+		fi
+		
+		echo "start burn rootfs by usb......"
+		if [ -f "${cp_rootfs_file_encrypt_path}" ]; then 
+			mkfs.ext4 -F /dev/system
+			decrypt_tools ${cp_rootfs_file_encrypt_path} /dev/system
+			if [ $? -eq 0 ]; then 
+				echo "success burn encrypt_rootfs by usb......"
+				/usr/sbin/fw_setenv xl_rootfs_upgrade "true"
+				/usr/sbin/fw_setenv second_rootfs_load "off"
+			fi
+		elif [ -f "${cp_rootfs_path}" ]; then
+			mkfs.ext4 -F /dev/system
+			dd if=${cp_rootfs_path} of=/dev/system
+			if [ $? -eq 0 ]; then 
+				echo "success burn rootfs by usb......"
+				/usr/sbin/fw_setenv xl_rootfs_upgrade "true"
+				/usr/sbin/fw_setenv second_rootfs_load "off"
+			fi
+		fi
+		
+		if [ -f "${burn_loop_flag_path}" ]; then 
+			echo "loop burn, so don't touch flag file......"
+		else
+			echo "normal burn, so touch flag file......"
+			touch ${burn_flag_path}
+		fi
+			
+		sync
+		
+		echo "start umount usb and img......"
+		umount -l ${mount_usb_dev} 
+		umount -l ${mount_img_dev}
+	fi
+}
+
+add_default_deviceinfo()
+{
+	usid=`/usr/sbin/fw_printenv usid 2>/dev/null | awk -F'=' '{print $2}'`
+	if [ ! -f "/usr/sbin/fw_setenv" ]; then 
+		ln -sf /usr/sbin/fw_printenv /usr/sbin/fw_setenv
+	fi
+	if [ "${usid}" = "" ]; then
+		for i in $(cat /proc/cmdline); do
+			case $i in
+				androidboot.serialno\=*)
+					usid=`echo $i | awk -F'=' '{print $2}'`
+			esac
+		done
+		if [ "${usid}" != "" ]; then
+			usid_prefix="FXNL"
+			if [ "${usid:0:4}" != "${usid_prefix}" ]; then
+				usid="${usid_prefix}""${usid}"
+				echo "add default usid..."
+				fw_setenv usid ${usid}
+			fi
+		fi
+	else
+		usid_prefix="FXNL"
+		if [ "${usid:0:4}" != "${usid_prefix}" ]; then
+			usid="${usid_prefix}""${usid}"
+			echo "modify default usid..."
+			fw_setenv usid ${usid}
+		fi
+	fi
+	
+	echo "usid = $usid"
+	
+	softmode=`/usr/sbin/fw_printenv xl_softmode 2>/dev/null | awk -F'=' '{print $2}'`
+	if [ "${softmode}" = "" ]; then
+		echo "first set xl_softmode"
+		fw_setenv xl_softmode "usermode"
+	fi
+}
+
+echo "version 20190325"
+tmpdate=`date`
+echo "kernel date = ${tmpdate}"
+add_default_deviceinfo
+check_usb_burn
+init_root_by_env
+mount_rootfs
+
+#Check if $init exists and is executable
+if [[ -x "/mnt/${init}" ]] ; then
+	#Switch to the new root and execute init
+    /bin/mount -t devtmpfs devtmpfs /mnt/dev
+	
+	#mediafs_create after mount devtmpfs and before umont sys
+	mediafs_create /mnt/ dev/loop0
+
+    #Unmount all other mounts so that the ram used by
+    #the initramfs can be cleared after switch_root
+    umount /sys /proc /dev
+
+	#must after mount devtmpfs and mediafs_create, create_and_mount_mediafs is mount mediafs for chattr api
+	mediafs_mount /mnt/ dev/loop0
+	
+    exec 0</mnt/dev/console
+    exec 1>/mnt/dev/console
+    exec 2>/mnt/dev/console
+	if [ -f "/usr/lib/ufsd.ko" ]; then
+		echo "first insmod ufsd..."
+		insmod /usr/lib/jnl.ko
+		insmod /usr/lib/ufsd.ko
+		lsmod
+	else
+		echo "has not ufsd driver..."
+	fi
+	echo "switch_root starting new jia debug..."
+    exec switch_root -c /dev/console /mnt ${init}
+    echo "switch_root complete"
+fi
+
+#This will only be run if the exec above failed
+echo "Failed to switch root, dropping to a shell"
+exec /sbin/init

@@ -1,0 +1,9 @@
+Package: onecloud-base
+Priority: optional
+Version: V2.8.7
+Architecture: s905d
+Maintainer: xlwthink<xlwthink@xunlei.com>
+Depends: 
+Source: null
+Section: extras
+Description: Xunlei miner software.

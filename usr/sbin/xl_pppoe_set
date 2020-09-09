@@ -1,0 +1,90 @@
+#!/bin/sh
+
+set -x
+SWITCH=$1
+USERNAME=$2
+PASSWORD=$3
+
+network_config=/etc/network/interfaces
+debug_file=/var/cache/pppoe_debug.txt
+
+function reset_network_interface()
+{
+    HOSTNAME=`cat /etc/hostname`
+    if [ ! -n "$HOSTNAME" ];then
+        HOSTNAME="OneCloud"
+    fi
+    
+    echo "auto lo " > $network_config 
+    echo "iface lo inet loopback" >> $network_config
+    echo "hostname $HOSTNAME " >> $network_config
+
+}
+
+function clean_network()
+{
+    killall udhcpc
+    killall udhcpc6
+    dhcpv6_unset
+    ifdown -af
+}
+
+function clean_prev_pppoe()
+{
+    #killall -9 pppoe-start
+    #killall -9 pppoe-connect
+    #killall -9 pppoe
+    #killall -9 pppd
+    pppoe-stop
+}
+
+function config_pppoe_info()
+{
+    sed -i "s/USER=.*/USER=\'$1\'/" /etc/ppp/pppoe.conf
+    echo "\"$1\"   *       \"$2\"" > /etc/ppp/pap-secrets
+    echo "\"$1\"   *       \"$2\"" > /etc/ppp/chap-secrets
+}
+
+function start_pppoe()
+{
+    ifup -af
+    pppoe-start &
+}
+
+function dump_pppoe_info()
+{
+    echo "dump /etc/ppp/pppoe.conf:" > $debug_file
+    #grep "USER" /etc/ppp/pppoe.conf | tail -150 >>  $debug_file
+    cat /etc/ppp/pppoe.conf |grep -E "USER|ETH" | tail -150 >>  $debug_file
+    echo "" >>  $debug_file
+    echo "dump chap-secrets:" >>  $debug_file
+    cat /etc/ppp/chap-secrets | tail -150 >>  $debug_file
+    echo "" >>  $debug_file
+    echo "dump pap-secrets:" >>  $debug_file
+    cat /etc/ppp/pap-secrets | tail -150 >>  $debug_file
+    echo "" >>  $debug_file
+    echo "dump pppd log:" >>  $debug_file
+    grep 'ppp' /var/log/messages | tail -500 >>  $debug_file
+}
+
+
+echo "pppoe on:$1 username:$USERNAME password:$PASSWORD"
+
+if [ "$#" == "3" -a "$SWITCH" == "on" ]; then
+    echo "pppoe is on"
+    clean_network
+    reset_network_interface  
+    clean_prev_pppoe
+    config_pppoe_info $2 $3
+    start_pppoe
+elif [ "$#" == "1" -a "$SWITCH" == "off" ]; then
+    echo "pppoe is off"
+    clean_prev_pppoe
+elif [ "$#" == "1" -a "$SWITCH" == "debug" ]; then
+    echo "pppoe debug"
+    dump_pppoe_info
+else
+    echo "pppoe config info is wrong!"
+    exit 1
+fi 
+set -x

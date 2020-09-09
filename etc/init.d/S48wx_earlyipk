@@ -1,0 +1,77 @@
+#!/bin/sh
+#
+# Start launch early ipk...
+#
+log_file=/tmp/wx_earlyipk.log
+
+data_part=/dev/data
+data_part_mount_dir=/app
+
+rootfs_ipk_dir=/onecloud-pluginipk
+xyipk_dir=${data_part_mount_dir}/system
+
+rootfs_start_bin=bin/run.sh
+xyipk_start_bin=start.sh
+
+wait_data_part_mount()
+{
+	while true
+	do
+		check_status=`mount | grep "${data_part}" | grep "${data_part_mount_dir}"`
+		if [ "${check_status}" != "" ]; then
+			echo "data part mount ok" >> ${log_file}
+			return 0;
+		fi
+		
+		sleep 3;
+	done
+}
+
+start_process()
+{	
+	echo "start_process wx_earlyipk..." > ${log_file}
+	wait_data_part_mount
+	
+	cd ${rootfs_ipk_dir}
+	for ipk_name in `ls -d *.ipk 2>/dev/null`
+	do
+		echo "find early launch ipk ${ipk_name}" >> ${log_file}
+		xyipk_launch_bin=${xyipk_dir}/${ipk_name}/${xyipk_start_bin}
+		rootfs_launch_bin=${rootfs_ipk_dir}/${ipk_name}/${rootfs_start_bin}
+		if [ -f "${xyipk_launch_bin}" ]; then
+			sleep 3; #avoid xyipk install not completed...
+			echo "start launch ${xyipk_launch_bin} by xyipk" >> ${log_file}
+			sh ${xyipk_launch_bin} &
+		else
+			echo "start launch ${rootfs_launch_bin} by rootfs" >> ${log_file}
+			sh ${rootfs_launch_bin} &
+		fi
+	done
+}
+
+stop_process()
+{
+	echo "stop_process wx_earlyipk..." >> ${log_file}
+	echo "do nothing..." >> ${log_file}
+}
+
+case "$1" in
+  start)
+	printf "Starting wx_earlyipk: "
+	start_process &
+	;;
+  stop)
+	printf "Stopping wx_earlyipk: "
+	stop_process &
+	;;
+  restart|reload)
+	"$0" stop
+	"$0" start
+	;;
+  *)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+esac
+
+exit $?
+

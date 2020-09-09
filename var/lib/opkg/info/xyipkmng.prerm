@@ -1,0 +1,4 @@
+#!/bin/sh
+sh /app/miner.xyipkmng.ipk/stop.sh &
+exit 0 
+

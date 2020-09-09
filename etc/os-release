@@ -1,0 +1,5 @@
+NAME=Buildroot
+VERSION=2017.02-00032-gfac3c784
+ID=buildroot
+VERSION_ID=2017.02
+PRETTY_NAME="Buildroot 2017.02"

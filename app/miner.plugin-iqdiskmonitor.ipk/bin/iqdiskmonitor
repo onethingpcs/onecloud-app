@@ -1,2 +1,0 @@
-#!/bin/sh
-cd /app/system/miner.plugin-iqdiskmonitor.ipk/bin; sh iqdiskmonitor.sh 

@@ -1,0 +1,23 @@
+#!/bin/sh
+PLUGIN_NAME="plugin-boxweb"
+MAIN_EXE_NAME="boxweb"
+PROCESS_CMD_NAME="/onecloud-pluginipk/miner.${PLUGIN_NAME}.ipk/usr/sbin/nginx"
+FCGI_PROCESS_NAME="fcgiwrap -f -s unix:/run/fcgiwrap.socket"
+
+PLUGIN_PARAM=`cat /onecloud-pluginipk/miner.${PLUGIN_NAME}.ipk/conf/param`
+PLUGIN_DIR="/onecloud-pluginipk/miner.${PLUGIN_NAME}.ipk"
+PLUGIN_BIN_DIR="${PLUGIN_DIR}/bin"
+
+while :
+do
+    procnum=`ps | grep -w "$PROCESS_CMD_NAME" | grep -v grep| wc -l`
+    fcgi_procnum=`ps | grep -w "$FCGI_PROCESS_NAME" | grep -v grep | wc -l`
+    echo `date` $procnum >/tmp/.${PLUGIN_NAME}.log
+    if [ $procnum -eq 0 ] || [ $fcgi_procnum -eq 0 ]; then
+        echo "restart ${PLUGIN_NAME}" >>/tmp/.${PLUGIN_NAME}.log
+        cd ${PLUGIN_BIN_DIR} && ./${MAIN_EXE_NAME} ${PLUGIN_PARAM}
+    else
+        echo "${PLUGIN_NAME} work ok" >>/tmp/.${PLUGIN_NAME}.log
+    fi
+    sleep 30
+done

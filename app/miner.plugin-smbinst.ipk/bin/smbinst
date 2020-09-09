@@ -1,2 +1,0 @@
-#!/bin/sh
-cd /app/system/miner.plugin-smbinst.ipk/bin; python start.py

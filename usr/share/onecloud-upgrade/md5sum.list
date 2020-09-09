@@ -1,0 +1,4 @@
+e31ee9ba64a3ad8eb996dc9f4182ce54  usr/sbin/upgrade
+ec99f70c099f7cd26eea3fcac72b9cdd  usr/sbin/onecloud_upgrade_run.sh
+09775f103a5eaf3221e3e2c9f95ce069  usr/sbin/onecloud_upgrade_restart.sh
+7ec68eda6a2807211e1a2a58efa7f741  usr/share/onecloud-upgrade/.img_date

@@ -1,0 +1,14 @@
+/var/log/dnscrypt-proxy.log {
+    su root root
+    daily
+    compress
+    rotate 3
+    missingok
+    notifempty
+    create
+    sharedscripts
+    postrotate
+        ubus call xyipk restart '{"package":"plugin-dnscrypt-proxy"}'
+    endscript
+}
+

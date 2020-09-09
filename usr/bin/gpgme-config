@@ -1,0 +1,209 @@
+#!/bin/sh
+# Copyright (C) 1999, 2002, 2003 Free Software Foundation, Inc.
+#
+# This file is free software; as a special exception the author gives
+# unlimited permission to copy and/or distribute it, with or without
+# modifications, as long as this notice is preserved.
+#
+# This file is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+prefix=/usr
+exec_prefix=/usr
+
+# Make sure that no weird locale setting messes up our sed regexps etc.
+LC_COLLATE=C
+LC_ALL=C
+LANG=C
+
+# GPGME's own cflags and libs
+cflags="-I${prefix}/include"
+libs="-L${exec_prefix}/lib"
+
+# Network libraries.
+assuan_cflags="-I/data/jenkins2/workspace/OneCloudFirmware1_AP_192.168.126.224/output/mesongxl_p230_5.0/host/usr/aarch64-buildroot-linux-gnu/sysroot/usr/include"
+assuan_libs="-lassuan -L/data/jenkins2/workspace/OneCloudFirmware1_AP_192.168.126.224/output/mesongxl_p230_5.0/host/usr/aarch64-buildroot-linux-gnu/sysroot/usr/lib -lgpg-error"
+
+# Configure libgpg-error.
+gpg_error_cflags="-I/data/jenkins2/workspace/OneCloudFirmware1_AP_192.168.126.224/output/mesongxl_p230_5.0/host/usr/aarch64-buildroot-linux-gnu/sysroot/usr/include"
+gpg_error_libs="-L/data/jenkins2/workspace/OneCloudFirmware1_AP_192.168.126.224/output/mesongxl_p230_5.0/host/usr/aarch64-buildroot-linux-gnu/sysroot/usr/lib -lgpg-error"
+
+# Configure thread packages.
+thread_modules=""
+
+thread_modules="$thread_modules pthread"
+libs_pthread="-lpthread"
+cflags_pthread=""
+
+avail_lang='c cl'
+
+# Configure glib.
+libs_glib=""
+cflags_glib=""
+with_glib=
+
+output=""
+
+usage()
+{
+    cat <<EOF
+Usage: gpgme-config [OPTIONS]
+Options:
+	--thread={${thread_modules}}]
+	--prefix
+	--exec-prefix
+	--version
+        --api-version
+        --host
+	--libs
+	--cflags
+        --print-lang           Print available language bindings
+        --have-lang=LANG       Return success if LANG is available
+EOF
+    exit $1
+}
+
+if test $# -eq 0; then
+    usage 1 1>&2
+fi
+
+while test $# -gt 0; do
+    case "$1" in
+	-*=*)
+	    optarg=`echo "$1" | sed 's/[-_a-zA-Z0-9]*=//'`
+	    ;;
+	*)
+	    optarg=
+	    ;;
+    esac
+
+    case $1 in
+        --prefix=*)
+            # For compatibility reasons with old M4 macros, we ignore
+            # setting of prefix.
+            ;;
+        --prefix)
+	    output="$output $prefix"
+	    ;;
+        --exec-prefix=*)
+            ;;
+        --exec-prefix)
+	    output="$output $exec_prefix"
+	    ;;
+	--glib)
+	    with_glib=yes
+	    ;;
+        --version)
+            echo "1.7.1"
+	    exit 0
+	    ;;
+        --api-version)
+	    echo "1"
+	    exit 0
+	    ;;
+        --host)
+	    echo "aarch64-buildroot-linux-gnu"
+	    exit 0
+	    ;;
+        --cflags)
+            result=
+            tmp_c=
+            tmp_g=
+	    case "$thread_module" in
+	        pthread) tmp_c="$cflags_pthread" ;;
+	    esac
+	    test "x$with_glib" = "xyes" && tmp_g="$cflags_glib"
+            for i in $cflags $tmp_c $assuan_cflags $gpg_error_cflags $tmp_g ; do
+              skip=no
+              case $i in
+                  -I/usr/include|-I/include)
+                      skip=yes
+                      ;;
+                  -I*)
+                      for j in $result ; do
+                          if test x"$j" = x"$i" ; then
+                              skip=yes
+                              break;
+                          fi
+                      done
+                      ;;
+              esac
+              if test $skip = no ; then
+                  result="$result $i"
+              fi
+            done
+            output="$output $result"
+            ;;
+	--libs)
+            result=
+            tmp_x=
+	    case "$thread_module" in
+	        pthread) tmp_l="-lgpgme-pthread"; tmp_x="$libs_pthread" ;;
+		*)
+		    if test "x$with_glib" = "xyes" ; then
+		         tmp_l="-lgpgme-glib"
+                         tmp_x="$libs_glib"
+		    else
+			 tmp_l="-lgpgme"
+		    fi
+		    ;;
+	    esac
+            for i in $libs $tmp_l $assuan_libs $gpg_error_libs $tmp_x; do
+              skip=no
+              case $i in
+                  -L/usr/lib|-L/lib)
+                      skip=yes
+                      ;;
+                  -L*|-l*)
+                      for j in $result ; do
+                          if test x"$j" = x"$i" ; then
+                              skip=yes
+                              break;
+                          fi
+                      done
+                      ;;
+              esac
+              if test $skip = no ; then
+                  result="$result $i"
+              fi
+            done
+            output="$output $result"
+	    ;;
+	--thread=*)
+            for thread_mod in $thread_modules; do
+	    if test "$thread_mod" = "$optarg"; then
+		thread_module="$optarg";
+	    fi
+	    done
+	    if test "x$thread_module" = "x"; then
+		usage 1 1>&2
+	    fi
+	    ;;
+	--print-lang)
+            output="$avail_lang"
+	    ;;
+	--have-lang=*)
+            for lang in $avail_lang; do
+                if test x"$lang" = x"$optarg"; then
+                    exit 0
+                fi
+            done
+            exit 1
+	    ;;
+        --get-gpg)
+            # Deprecated
+            output="$output @GPG@"
+            ;;
+        --get-gpgsm)
+            # Deprecated
+            output="$output @GPGSM@"
+            ;;
+	*)
+            usage 1 1>&2
+	    ;;
+    esac
+    shift
+done
+
+echo $output

@@ -1,0 +1,64 @@
+#!/bin/sh
+# /usr/lib/sa/sa2
+# (C) 1999-2016 Sebastien Godard (sysstat <at> orange.fr)
+#
+#@(#) sysstat-11.4.3
+#@(#) sa2: Write a daily report
+#
+S_TIME_FORMAT=ISO ; export S_TIME_FORMAT
+umask 0022
+prefix=/usr
+exec_prefix=/usr
+SA_DIR=/var/log/sa
+SYSCONFIG_DIR=/etc/sysconfig
+HISTORY=7
+COMPRESSAFTER=10
+ZIP="xz"
+
+# Read configuration file, overriding variables set above
+[ -r ${SYSCONFIG_DIR}/sysstat ] && . ${SYSCONFIG_DIR}/sysstat
+
+[ -d ${SA_DIR} ] || SA_DIR=/var/log/sa
+
+# if YESTERDAY=no then today's summary is generated
+if [ x$YESTERDAY = xno ]
+then
+	DATE_OPTS=
+else
+	DATE_OPTS="--date=yesterday"
+fi
+
+if [ ${HISTORY} -gt 28 ]
+then
+	DATE=`date ${DATE_OPTS} +%Y%m%d`
+else
+	DATE=`date ${DATE_OPTS} +%d`
+fi
+CURRENTFILE=sa${DATE}
+CURRENTRPT=sar${DATE}
+
+RPT=${SA_DIR}/${CURRENTRPT}
+DFILE=${SA_DIR}/${CURRENTFILE}
+ENDIR=${exec_prefix}/bin
+
+[ -f "${DFILE}" ] || exit 0
+cd ${ENDIR}
+if [ x${REPORTS} != xfalse ]
+then
+	${ENDIR}/sar $* -f ${DFILE} > ${RPT}
+fi
+
+SAFILES_REGEX='/sar?[0-9]{2,8}(\.(Z|gz|bz2|xz|lz|lzo))?$'
+
+find "${SA_DIR}" -type f -mtime +${HISTORY} \
+	| egrep "${SAFILES_REGEX}" \
+	| xargs   rm -f
+
+UNCOMPRESSED_SAFILES_REGEX='/sar?[0-9]{2,8}$'
+
+find "${SA_DIR}" -type f -mtime +${COMPRESSAFTER} \
+	| egrep "${UNCOMPRESSED_SAFILES_REGEX}" \
+	| xargs   "${ZIP}" > /dev/null
+
+exit 0
+

@@ -1,0 +1,168 @@
+#!/bin/sh
+HOSTNAME=`cat /etc/hostname`
+if [ ! -n "$HOSTNAME" ];then
+    HOSTNAME="OneCloud"
+fi
+
+network_config=/etc/network/interfaces
+
+config_double_dhcp()
+{
+    killall udhcpc
+    killall udhcpc6
+
+    echo "auto lo " > $network_config
+    echo "iface lo inet loopback" >> $network_config
+    echo "" >> $network_config
+    echo "auto eth0" >> $network_config
+    echo "iface eth0 inet dhcp " >> $network_config
+    echo "" >> $network_config
+    echo "iface eth0 inet6 manual " >> $network_config
+    echo "post-up dhcpv6_set \$IFACE" >> $network_config
+    echo "" >> $network_config
+    echo "hostname $HOSTNAME " >> $network_config
+}
+
+config_double_static()
+{
+    killall udhcpc
+    killall udhcpc6
+    dhcpv6_unset
+
+    echo "auto lo " > $network_config
+    echo "iface lo inet loopback" >> $network_config
+    echo "" >> $network_config
+    echo "auto eth0" >> $network_config
+    echo "iface eth0 inet static " >> $network_config
+    echo "address $1" >> $network_config
+    echo "netmask $2" >> $network_config
+    echo "broadcast $3" >> $network_config
+    if [ "$4" != "none_gateway" ];then
+	echo "gateway $4" >> $network_config
+        route add default gw $4
+    fi
+    echo "" >> $network_config
+    echo "iface eth0 inet6 static " >> $network_config
+    echo "address $5" >> $network_config
+    echo "netmask $6" >> $network_config
+    if [ "$7" != "none_gateway" ];then
+        echo "gateway $7" >> $network_config
+    fi
+    echo "" >> $network_config
+    echo "hostname $HOSTNAME " >> $network_config
+}
+
+config_ipv4_dhcp_ipv6_static()
+{
+    killall udhcpc
+    killall udhcpc6
+    dhcpv6_unset
+
+    echo "auto lo " > $network_config
+    echo "iface lo inet loopback" >> $network_config
+    echo "" >> $network_config
+    echo "auto eth0" >> $network_config
+    echo "iface eth0 inet dhcp " >> $network_config
+    echo "" >> $network_config
+    echo "iface eth0 inet6 static " >> $network_config
+    echo "address $1" >> $network_config
+    echo "netmask $2" >> $network_config
+    if [ "$3" != "none_gateway" ];then
+	    echo "gateway $3" >> $network_config
+    fi
+    # does it need to add default gw?
+    echo "" >> $network_config
+    echo "hostname $HOSTNAME " >> $network_config
+}
+
+config_ipv4_static_ipv6_dhcp()
+{
+    killall udhcpc
+    killall udhcpc6
+
+    echo "auto lo " > $network_config
+    echo "iface lo inet loopback" >> $network_config
+    echo "" >> $network_config
+    echo "auto eth0" >> $network_config
+    echo "iface eth0 inet static " >> $network_config
+    echo "address $1" >> $network_config
+    echo "netmask $2" >> $network_config
+    echo "broadcast $3" >> $network_config
+    if [ "$4" != "none_gateway" ];then
+	echo "gateway $4" >> $network_config
+        route add default gw $4
+    fi
+    echo "" >> $network_config
+    echo "iface eth0 inet6 manual " >> $network_config
+    echo "post-up dhcpv6_set \$IFACE" >> $network_config
+    echo "" >> $network_config
+    echo "hostname $HOSTNAME" >> $network_config
+}
+
+restart_network ()
+{
+    /sbin/ifdown -af
+    /sbin/ifup -af
+}
+
+if [ $# == 2 ]; then
+    echo "arg_list: $1 $2"
+    if [ "$1" == "dhcp" -a "$2" == "dhcp" ];then
+        echo "double dhcp"
+        config_double_dhcp
+        restart_network
+    fi
+    exit 0
+fi
+
+if [ $# == 4 ]; then
+    echo "arg_list: $1 $2 $3 $4"
+    if [ -n "$4" ];then
+        v6_gateway=$4
+    else
+        v6_gateway="none_gateway"
+    fi
+    if [ "$1" == "dhcp" ];then
+        echo "IPv4 dhcp, IPv6 static"
+        if [ -n "$4" ]; then
+            config_ipv4_dhcp_ipv6_static $2 $3 $4
+        else
+            config_ipv4_dhcp_ipv6_static $2 $3 $v6_gateway
+        fi
+        restart_network
+    fi
+    exit 0
+fi
+
+if [ $# == 5 ]; then
+    echo "arg_list: $1 $2 $3 $4 $5"
+    if [ -n "$4" ];then
+        v4_gateway=$4
+    else
+        v4_gateway="none_gateway"
+    fi
+    if [ "$5" == "dhcp" ];then
+        echo "IPv4 static, IPv6 dhcp"
+        config_ipv4_static_ipv6_dhcp $1 $2 $3 $v4_gateway
+        restart_network
+    fi
+    exit 0
+fi
+
+if [ $# == 7 ]; then
+    echo "arg_list: $1 $2 $3 $4 $5 $6 $7"
+    if [ -n "$4" ];then
+        v4_gateway=$4
+    else
+        v4_gateway="none_gateway"
+    fi
+    if [ -n "$7" ];then
+        v6_gateway=$7
+    else
+        v6_gateway="none_gateway"
+    fi
+    echo "double static"
+    config_double_static $1 $2 $3 $v4_gateway $5 $6 $v6_gateway
+    restart_network
+    exit 0
+fi

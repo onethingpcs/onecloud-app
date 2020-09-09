@@ -1,0 +1,18 @@
+Package: onecloud-base
+Version: V2.8.7
+Status: install user installed
+Architecture: s905d
+Installed-Time: 1597056959
+
+Package: onecloud-upgrade
+Version: V2.1.1
+Status: install user installed
+Architecture: s905d
+Installed-Time: 1597056967
+
+Package: xyipkmng
+Version: V1.2.9
+Status: install user installed
+Architecture: s905d
+Installed-Time: 1597056972
+

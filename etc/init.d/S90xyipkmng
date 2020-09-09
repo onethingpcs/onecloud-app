@@ -4,7 +4,39 @@
 START=90
 start() 
 {
-    sh /app/miner.xyipkmng.ipk/start.sh &
+    mount_dev="/dev/data"
+
+    /sbin/blkid $mount_dev && /usr/sbin/e2fsck -fy $mount_dev > /tmp/fsck_dev_data.log
+    /usr/sbin/fsck.ext4 -p $mount_dev
+    mount $mount_dev /app
+    if [ $? -ne 0 ]; then
+        echo "mount /dev/data failed" >> /tmp/fsck_dev_data.log
+	else
+        # mount success,do copy-action guarantee
+        echo "mount /dev/data success" >> /tmp/fsck_dev_data.log
+        if [ ! -f "/app/.app_copy_ok" ]; then
+            echo "do app data copy" >> /tmp/fsck_dev_data.log
+            mkdir -p /tmp/system
+            mount -o ro /dev/system /tmp/system
+            diff -r /app /tmp/system/app >/dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                cp -arf /tmp/system/app/. /app
+                sync
+                touch /tmp/repair.app
+            fi
+            umount /tmp/system
+            touch /app/.app_copy_ok
+        fi		
+    fi	
+
+    XYIPK_DELAY_CONF=/etc/xyipk_delay.conf
+    if [ -f $XYIPK_DELAY_CONF ]; then
+        local delay_time=`cat $XYIPK_DELAY_CONF`
+    else
+        delay_time=0
+    fi
+    echo delay_time=$delay_time...
+    (sleep $delay_time; ps w | pidof xyipk || sh /app/miner.xyipkmng.ipk/start.sh) &
 }
 
 stop() 

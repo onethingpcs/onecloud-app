@@ -1,0 +1,16 @@
+#!/bin/sh
+# Load modules specified in the configuration file.
+# ---------------------------------------------------
+CONF=/etc/modules
+# Do nothing if the modules file is missing.
+if [ ! -f $CONF ]; then
+    exit 0
+fi
+# Make sure module dependencies are up to date.
+depmod
+# Read the configuration file and load the modules.
+cat $CONF | grep -v "^#" | while read file
+do
+    # Do this quietly (-q doesn't ignore errors)
+    modprobe $file 2> /dev/null
+done

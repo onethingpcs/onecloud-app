@@ -1,0 +1,65 @@
+#!/bin/sh
+
+OTC_BASE_DIR=/onecloud_base
+
+OTC_INFO_DIR=/tmp/.otc_info
+BASEINFO_CONF=${OTC_INFO_DIR}/otc_baseinfo.txt
+
+if [ -f "${BASEINFO_CONF}" ]; then
+    TMP_BASE_DIR=`cat ${BASEINFO_CONF}`
+    if [ ! -z "${TMP_BASE_DIR}" -a -d "${TMP_BASE_DIR}" ]; then
+        echo ${TMP_BASE_DIR} ok;
+        OTC_BASE_DIR=${TMP_BASE_DIR}
+    else
+        echo ${TMP_BASE_DIR} error;
+    fi
+else
+    echo ${BASEINFO_CONF} not find
+fi
+
+start_base()
+{	
+	OTC_BASE_RUN_SH=${OTC_BASE_DIR}/thunder/bin/run_base.sh
+	if [ -f "${OTC_BASE_RUN_SH}" ]; then
+		echo "otc use ${OTC_BASE_RUN_SH} ${OTC_BASE_DIR} for base" 
+		/bin/sh ${OTC_BASE_RUN_SH} ${OTC_BASE_DIR} &
+	else
+		echo "otc ${OTC_BASE_RUN_SH} not find"
+		#/bin/sh /thunder/bin/run.sh &
+	fi
+}
+
+stop_base()
+{	
+	OTC_BASE_STOP_SH=${OTC_BASE_DIR}/thunder/bin/stop_base.sh
+	if [ -f "${OTC_BASE_STOP_SH}" ]; then
+		/bin/sh ${OTC_BASE_STOP_SH}
+	else
+		echo "otc stop sh can't find ${OTC_BASE_STOP_SH} base"
+	fi
+}
+
+case "$1" in
+    start)
+        ## [DNS optimization] do not patch 'dnsmasq' and 'inittab'
+        rm -f /thunder/rootfs_patch/etc/dnsmasq.conf
+        rm -f /thunder/rootfs_patch/etc/inittab
+        ## [DNS optimization] done
+		start_base
+
+		#wait init env
+		sleep 1
+		sh /usr/sbin/onecloud_upgrade_run.sh &
+    ;;
+    stop)
+		stop_base
+    ;;
+    restart|reload)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?
+
